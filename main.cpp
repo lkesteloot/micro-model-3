@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <string>
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "pico/binary_info.h"
@@ -19,6 +20,11 @@
 #define TFT_WIDTH       320
 #define TFT_HEIGHT      240
 #define TFT_ROTATION    1
+
+#define CMD_LOAD_BLOCK 0x01
+#define CMD_TRANSFER_ADDRESS 0x02
+#define CMD_LOAD_MODULE_HEADER 0x05
+
 
 // Colors are in 565 (FFFF) format. To convert from RGB888 to RGB565, use:
 #define RGB888TO565(r, g, b) ((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
@@ -45,9 +51,11 @@ void configure_lcd() {
 }
 
 void writeScreenChar(int position, uint8_t ch) {
+#if 0
     if (ch > 32 && ch < 128) {
         printf("%4d %c\n", position, ch);
     }
+#endif
     int textCol = position % 64;
     int textRow = position / 64;
 
@@ -67,6 +75,70 @@ void keyCallback(int ch) {
     handleKeypress(ch, false);
 }
 
+void runCmdProgram(int program) {
+    int size;
+    uint8_t *binary;
+
+    switch (program) {
+        case 0:
+        default:
+            size = OBSTACLE_RUN_CMD_SIZE;
+            binary = OBSTACLE_RUN_CMD;
+            break;
+    }
+
+    int i = 0;
+    while (true) {
+        if (i >= size) {
+            printf("CMD program ran off the end (%d >= %d)\n", i, size);
+            return;
+        }
+
+        int chunkType = binary[i++];
+        int chunkLength = binary[i++];
+
+        // Adjust load block length.
+        if (chunkType == CMD_LOAD_BLOCK && chunkLength <= 2) {
+            chunkLength += 256;
+        } else if (chunkType == CMD_LOAD_MODULE_HEADER && chunkLength == 0) {
+            chunkLength = 256;
+        }
+
+        uint8_t *data = &binary[i];
+        i += chunkLength;
+
+        switch (chunkType) {
+            case CMD_LOAD_BLOCK: {
+                uint16_t address = data[0] | (data[1] << 8);
+                int dataLength = chunkLength - 2;
+                printf("CMD loading %d bytes at 0x%04X\n", dataLength, address);
+                for (int i = 0; i < dataLength; i++) {
+                    writeMemoryByte(address + i, data[2 + i]);
+                }
+                break;
+            }
+
+            case CMD_TRANSFER_ADDRESS: {
+                uint16_t address = data[0] | (data[1] << 8);
+                printf("CMD jumping to 0x%04X\n", address);
+                jumpToAddress(address);
+                // Stop parsing.
+                return;
+            }
+
+            case CMD_LOAD_MODULE_HEADER: {
+                std::string name((char *) data, chunkLength);
+                printf("CMD loading \"%s\"\n", name.c_str());
+                break;
+            }
+
+            default:
+                printf("Unknown CMD chunk type %d\n", chunkType);
+                return;
+        }
+    }
+}
+
 int main() {
     stdio_init_all();
 
@@ -79,6 +151,7 @@ int main() {
     queueEvent(1, keyCallback, 'L');
     queueEvent(2, keyCallback, '0');
     queueEvent(3, keyCallback, '\n');
+    queueEvent(4, runCmdProgram, 0);
 #endif
 
     trs80_main();

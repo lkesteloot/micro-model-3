@@ -493,6 +493,14 @@ void queueEvent(float seconds, void (*callback)(int data), int data) {
     gQueuedEvents.emplace_back(clock, callback, data);
 }
 
+void writeMemoryByte(uint16_t address, uint8_t value) {
+    Trs80WriteByte(&gMachine, address, value);
+}
+
+void jumpToAddress(uint16_t pc) {
+    gMachine.z80.pc = pc;
+}
+
 int trs80_main()
 {
     bool quit = false;
