@@ -78,10 +78,10 @@ struct KeyEvent {
 struct QueuedKeyEvent {
     // Since Z80 boot.
     unsigned long long microseconds;
-    KeyEvent keyEvent;
+    uint8_t ch;
 
-    QueuedKeyEvent(unsigned long long microseconds, KeyEvent keyEvent) :
-        microseconds(microseconds), keyEvent(keyEvent) {}
+    QueuedKeyEvent(unsigned long long microseconds, uint8_t ch) :
+        microseconds(microseconds), ch(ch) {}
 };
 
 static std::vector<QueuedKeyEvent> gQueuedKeyEvents;
@@ -129,7 +129,7 @@ typedef struct Trs80Machine {
     // Which NMIs have been requested by the hardware.
     uint8_t nmiLatch;
     // Whether we've seen this NMI and handled it.
-    int nmiSeen;
+    bool nmiSeen;
     // Latch that mostly does nothing.
     uint8_t modeImage;
 } Trs80Machine;
@@ -366,7 +366,7 @@ static void setIrqMask(Trs80Machine *machine, uint8_t irqMask) {
 // Reset whether we've seen this NMI interrupt if the mask and latch no longer overlap.
 static void updateNmiSeen(Trs80Machine *machine) {
     if ((machine->nmiLatch & machine->nmiMask) == 0) {
-        machine->nmiSeen = 0;
+        machine->nmiSeen = false;
     }
 }
 
@@ -411,7 +411,9 @@ static void resetMachine(Trs80Machine *machine) {
     machine->clock = 0;
     machine->modeImage = 0x80;
     setIrqMask(machine, 0);
+    machine->irqLatch = 0;
     setNmiMask(machine, 0);
+    machine->nmiLatch = 0;
     // resetCassette(machine);
     clearKeyboard(machine);
     setTimerInterrupt(machine, false);
@@ -469,10 +471,18 @@ uint8_t Trs80ReadPort(Trs80Machine *machine, uint8_t address) {
             break;
     }
 
+#if 0
+    printf("Read port 0x%02X to get 0x%02X\n", address, value);
+#endif
+
     return value;
 }
 
 void Trs80WritePort(Trs80Machine *machine, uint8_t address, uint8_t value) {
+#if 0
+    printf("Write port 0x%02X value 0x%02X\n", address, value);
+#endif
+
     switch (address) {
         case 0xE0:
             // Set interrupt mask.
@@ -500,8 +510,8 @@ void Trs80WritePort(Trs80Machine *machine, uint8_t address, uint8_t value) {
     }
 }
 
-void queueKey(long long microseconds, uint8_t ch, bool press) {
-    gQueuedKeyEvents.emplace_back(microseconds, KeyEvent(ch, press));
+void queueKey(long long microseconds, uint8_t ch) {
+    gQueuedKeyEvents.emplace_back(microseconds, ch);
 }
 
 int trs80_main()
@@ -539,21 +549,35 @@ int trs80_main()
         auto now = std::chrono::system_clock::now();
         auto microsSinceStart = std::chrono::duration_cast<std::chrono::microseconds>(now - emulationStartTime);
         if (!gQueuedKeyEvents.empty() && gQueuedKeyEvents[0].microseconds < microsSinceStart.count()) {
-            handleKeypress(machine,
-                    gQueuedKeyEvents[0].keyEvent.key, 
-                    gQueuedKeyEvents[0].keyEvent.isPress);
+            printf("Inserting key event (%d) (%llu < %llu)\n", 
+                    gQueuedKeyEvents[0].ch,
+                    gQueuedKeyEvents[0].microseconds,
+                    microsSinceStart.count());
+            handleKeypress(machine, gQueuedKeyEvents[0].ch, true);
+            handleKeypress(machine, gQueuedKeyEvents[0].ch, false);
             gQueuedKeyEvents.erase(gQueuedKeyEvents.begin());
         }
         clk_t expectedClock = Trs80ClockHz * microsSinceStart.count() / 1000000;
         if (expectedClock < machine->clock) {
+#if 0
+            printf("Skipping because %lld < %lld (%d left)\n",
+                    expectedClock, machine->clock, machine->clock - expectedClock);
+#endif
             continue;
         }
 
         // Emulate!
-        machine->clock += Z80Emulate(&machine->z80, cyclesToDo, machine);
+        int doneCycles = Z80Emulate(&machine->z80, cyclesToDo, machine);
+        machine->clock += doneCycles;
+#if 0
+        printf("E %llu 0x%04X %lld %d\n", machine->clock, machine->z80.pc, cyclesToDo, doneCycles);
+#endif
 
         // Handle non-maskable interrupts.
         if ((machine->nmiLatch & machine->nmiMask) != 0 && !machine->nmiSeen) {
+#if 0
+            printf("N %llu 0x%04X\n", machine->clock, machine->z80.pc);
+#endif
             machine->clock += Z80NonMaskableInterrupt(&machine->z80, machine);
             machine->nmiSeen = true;
 
@@ -563,11 +587,18 @@ int trs80_main()
 
         // Handle interrupts.
         if ((machine->irqLatch & machine->irqMask) != 0) {
+#if 0
+            printf("I %llu 0x%04X 0x%02X 0x%02X %d\n", machine->clock, machine->z80.pc,
+                    machine->irqLatch, machine->irqMask, machine->z80.iff1);
+#endif
             machine->clock += Z80Interrupt(&machine->z80, 0, machine);
         }
 
         // Set off a timer interrupt.
         if (machine->clock > nextTimerClock) {
+#if 0
+            printf("T %llu 0x%04X\n", machine->clock, machine->z80.pc);
+#endif
             handleTimer(machine);
             previousTimerClock = machine->clock;
         }

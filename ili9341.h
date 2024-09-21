@@ -92,7 +92,12 @@ void LCD_initDisplay();
 
 void LCD_setRotation(uint8_t m);
 
-void LCD_WritePixel(int x, int y, uint16_t col);
-void LCD_WriteBitmap(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t *bitmap);
+// As modified by rotation:
+uint16_t LCD_getWidth();
+uint16_t LCD_getHeight();
+
+void LCD_writePixel(int x, int y, uint16_t col);
+void LCD_writeBitmap(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t *bitmap);
+void LCD_fillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color);
 
 #endif

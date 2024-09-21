@@ -7,11 +7,6 @@
 uint16_t _width;  ///< Display width as modified by current rotation
 uint16_t _height; ///< Display height as modified by current rotation
 
-int16_t _xstart = 0; ///< Internal framebuffer X offset
-int16_t _ystart = 0; ///< Internal framebuffer Y offset
-
-uint8_t rotation;
-
 spi_inst_t *ili9341_spi = spi_default;
 
 uint16_t ili9341_pinCS = PICO_DEFAULT_SPI_CSN_PIN;
@@ -20,6 +15,9 @@ int16_t ili9341_pinRST = 16;
 
 uint16_t ili9341_pinSCK = PICO_DEFAULT_SPI_SCK_PIN;
 uint16_t ili9341_pinTX = PICO_DEFAULT_SPI_TX_PIN;
+
+static uint gDmaChannel;
+static dma_channel_config gDmaConfig;
 
 const uint8_t initcmd[] = {
 	24, //24 commands
@@ -49,16 +47,6 @@ const uint8_t initcmd[] = {
 	ILI9341_DISPON, 0x80, // Display on
 	0x00				  // End of list
 };
-
-#ifdef USE_DMA
-uint dma_tx;
-dma_channel_config dma_cfg;
-void waitForDMA()
-{
-
-	dma_channel_wait_for_finish_blocking(dma_tx);
-}
-#endif
 
 void LCD_setPins(uint16_t dc, uint16_t cs, int16_t rst, uint16_t sck, uint16_t tx)
 {
@@ -96,12 +84,10 @@ void initSPI()
 		gpio_put(ili9341_pinRST, 1);
 	}
 
-#ifdef USE_DMA
-	dma_tx = dma_claim_unused_channel(true);
-	dma_cfg = dma_channel_get_default_config(dma_tx);
-	channel_config_set_transfer_data_size(&dma_cfg, DMA_SIZE_16);
-	channel_config_set_dreq(&dma_cfg, spi_get_dreq(ili9341_spi, true));
-#endif
+	gDmaChannel = dma_claim_unused_channel(true);
+	gDmaConfig = dma_channel_get_default_config(gDmaChannel);
+	channel_config_set_transfer_data_size(&gDmaConfig, DMA_SIZE_16);
+	channel_config_set_dreq(&gDmaConfig, spi_get_dreq(ili9341_spi, true));
 }
 
 void ILI9341_Reset()
@@ -196,8 +182,7 @@ void LCD_initDisplay()
 
 void LCD_setRotation(uint8_t m)
 {
-	rotation = m % 4; // can't be higher than 3
-	switch (rotation)
+	switch (m % 4)
 	{
 	case 0:
 		m = (MADCTL_MX | MADCTL_BGR);
@@ -243,33 +228,60 @@ void LCD_setAddrWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 	ILI9341_WriteCommand(ILI9341_RAMWR);
 }
 
-void LCD_WriteBitmap(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t *bitmap)
+void LCD_writeBitmap(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t *bitmap)
 {
 	ILI9341_Select();
 	LCD_setAddrWindow(x, y, w, h); // Clipped area
 	ILI9341_RegData();
 	spi_set_format(ili9341_spi, 16, SPI_CPOL_1, SPI_CPOL_1, SPI_MSB_FIRST);
-#ifdef USE_DMA
-	dma_channel_configure(dma_tx, &dma_cfg,
-						  &spi_get_hw(ili9341_spi)->dr, // write address
-						  bitmap,						// read address
-						  w * h,						// element count (each element is of size transfer_data_size)
-						  true);						// start asap
-	waitForDMA();
-#else
 
-	spi_write16_blocking(ili9341_spi, bitmap, w * h);
-#endif
+        channel_config_set_read_increment(&gDmaConfig, true);
+        channel_config_set_write_increment(&gDmaConfig, false);
+	dma_channel_configure(gDmaChannel, &gDmaConfig,
+                &spi_get_hw(ili9341_spi)->dr,
+                bitmap,
+                (int) w * h,
+                true);
+	dma_channel_wait_for_finish_blocking(gDmaChannel);
 
 	ILI9341_DeSelect();
 }
 
-void LCD_WritePixel(int x, int y, uint16_t col)
+void LCD_fillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color)
+{
+	ILI9341_Select();
+	LCD_setAddrWindow(x, y, w, h); // Clipped area
+	ILI9341_RegData();
+	spi_set_format(ili9341_spi, 16, SPI_CPOL_1, SPI_CPOL_1, SPI_MSB_FIRST);
+
+        channel_config_set_read_increment(&gDmaConfig, false);
+        channel_config_set_write_increment(&gDmaConfig, false);
+	dma_channel_configure(gDmaChannel, &gDmaConfig,
+                &spi_get_hw(ili9341_spi)->dr,
+                &color,
+                (int) w * h,
+                true);
+	dma_channel_wait_for_finish_blocking(gDmaChannel);
+
+	ILI9341_DeSelect();
+}
+
+void LCD_writePixel(int x, int y, uint16_t color)
 {
 	ILI9341_Select();
 	LCD_setAddrWindow(x, y, 1, 1); // Clipped area
 	ILI9341_RegData();
 	spi_set_format(ili9341_spi, 16, SPI_CPOL_1, SPI_CPOL_1, SPI_MSB_FIRST);
-	spi_write16_blocking(ili9341_spi, &col, 1);
+	spi_write16_blocking(ili9341_spi, &color, 1);
 	ILI9341_DeSelect();
+}
+
+uint16_t LCD_getWidth()
+{
+    return _width;
+}
+
+uint16_t LCD_getHeight()
+{
+    return _height;
 }

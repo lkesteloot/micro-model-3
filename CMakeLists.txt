@@ -15,7 +15,7 @@ add_executable(mini-model-3
     trs80.cpp
     model3_rom.c
     ili9341.c
-    gfx.c
+    obstacle_run_cmd.c
 )
 
 # Serial output via USB:
