@@ -1,13 +1,6 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 int trs80_main();
-void queueKey(long long microseconds, uint8_t ch);
-
-#ifdef __cplusplus
-};
-#endif
+void queueEvent(float seconds, void (*callback)(int data), int data);
+void handleKeypress(int key, bool isPress);

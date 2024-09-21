@@ -62,6 +62,11 @@ void writeScreenChar(int position, uint8_t ch) {
     }
 }
 
+void keyCallback(int ch) {
+    handleKeypress(ch, true);
+    handleKeypress(ch, false);
+}
+
 int main() {
     stdio_init_all();
 
@@ -71,9 +76,9 @@ int main() {
     configure_lcd();
 
 #if 1
-    queueKey(1000000, 'L');
-    queueKey(2000000, '0');
-    queueKey(3000000, '\n');
+    queueEvent(1, keyCallback, 'L');
+    queueEvent(2, keyCallback, '0');
+    queueEvent(3, keyCallback, '\n');
 #endif
 
     trs80_main();

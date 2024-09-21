@@ -9,7 +9,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-psabi")
 pico_sdk_init()
 
 add_executable(mini-model-3
-    main.c
+    main.cpp
     z80emu.c
     fonts.cpp
     trs80.cpp

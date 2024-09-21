@@ -75,16 +75,16 @@ struct KeyEvent {
     KeyEvent(int key, bool isPress) : key(key), isPress(isPress) {}
 };
 
-struct QueuedKeyEvent {
-    // Since Z80 boot.
-    unsigned long long microseconds;
-    uint8_t ch;
+struct QueuedEvent {
+    clk_t clock;
+    void (*callback)(int data);
+    int data;
 
-    QueuedKeyEvent(unsigned long long microseconds, uint8_t ch) :
-        microseconds(microseconds), ch(ch) {}
+    QueuedEvent(clk_t clock, void (*callback)(int data), int data) :
+        clock(clock), callback(callback), data(data) {}
 };
 
-static std::vector<QueuedKeyEvent> gQueuedKeyEvents;
+static std::vector<QueuedEvent> gQueuedEvents;
 
 // IRQs
 // constexpr uint8_t M1_TIMER_IRQ_MASK = 0x80;
@@ -134,34 +134,12 @@ typedef struct Trs80Machine {
     uint8_t modeImage;
 } Trs80Machine;
 
-// Record what values the system wants us to us for black and white.
-static uint8_t NTSCBlack, NTSCWhite;
-
-// Called by the system to initialize our video memory.
-static int Trs80TextModeInit([[maybe_unused]] void *private_data,
-        uint8_t black, uint8_t white)
-{
-    NTSCBlack = black;
-    NTSCWhite = white;
-
-    return 1;
-}
-
-static void Trs80TextModeFini([[maybe_unused]] void *private_data)
-{
-    // Nothing.
-}
-
-// Called by the system to know whether to generate the color burst signal.
-static int Trs80TextModeNeedsColorburst()
-{
-    return 0;
-}
+static Trs80Machine gMachine;
 
 // Generate the map from Rosa's keycap enum to the TRS-80's memory-mapped
 // keyboard bytes.
-static void initializeKeyboardMap(Trs80Machine *machine) {
-    auto &m = machine->keyMap;
+static void initializeKeyboardMap() {
+    auto &m = gMachine.keyMap;
 
     m['0'] = { 4, 0, ST_NEUTRAL, 5, 1, ST_FORCE_DOWN };
     m['L'] = { 1, 4 };
@@ -230,46 +208,46 @@ static void initializeKeyboardMap(Trs80Machine *machine) {
 }
 
 // Release all keys.
-static void clearKeyboard(Trs80Machine *machine) {
-    memset(machine->keys, 0, sizeof(machine->keys));
-    machine->shiftForce = ST_NEUTRAL;
-    machine->leftShiftPressed = false;
-    machine->rightShiftPressed = false;
-    machine->keyProcessMinClock = 0;
+static void clearKeyboard() {
+    memset(gMachine.keys, 0, sizeof(gMachine.keys));
+    gMachine.shiftForce = ST_NEUTRAL;
+    gMachine.leftShiftPressed = false;
+    gMachine.rightShiftPressed = false;
+    gMachine.keyProcessMinClock = 0;
 }
 
 // Process the next queued key event, if available. Returns whether a key was
 // dequeued.
-static bool processKeyQueue(Trs80Machine *machine) {
-    if (machine->keyQueue.empty()) {
+static bool processKeyQueue() {
+    if (gMachine.keyQueue.empty()) {
         return false;
     }
 
-    KeyEvent const &keyEvent = machine->keyQueue.front();
-    machine->keyQueue.pop_front();
+    KeyEvent const &keyEvent = gMachine.keyQueue.front();
+    gMachine.keyQueue.pop_front();
     int key = keyEvent.key;
     bool isPress = keyEvent.isPress;
 
     // Remember shift state.
     /*
     if (key == KEYCAP_LEFTSHIFT) {
-        machine->leftShiftPressed = isPress;
+        gMachine.leftShiftPressed = isPress;
     }
     if (key == KEYCAP_RIGHTSHIFT) {
-        machine->rightShiftPressed = isPress;
+        gMachine.rightShiftPressed = isPress;
     }
     */
 
     // Find the info for this keycap.
-    auto itr = machine->keyMap.find(key);
-    if (itr != machine->keyMap.end()) {
+    auto itr = gMachine.keyMap.find(key);
+    if (itr != gMachine.keyMap.end()) {
         KeyInfo &keyInfo = itr->second;
 
         // Remember shifted state for the release, in case the user releases
         // Shift before releasing the key.
         bool shiftPressed;
         if (isPress) {
-            shiftPressed = machine->leftShiftPressed || machine->rightShiftPressed;
+            shiftPressed = gMachine.leftShiftPressed || gMachine.rightShiftPressed;
             keyInfo.shiftPressed = shiftPressed;
         } else {
             shiftPressed = keyInfo.shiftPressed;
@@ -287,14 +265,14 @@ static bool processKeyQueue(Trs80Machine *machine) {
 
         if (byteIndex != KEYBOARD_IGNORE) {
             // Update the keyboard matrix bit.
-            machine->shiftForce = useShiftedData
+            gMachine.shiftForce = useShiftedData
                 ? keyInfo.shiftedShiftForce
                 : keyInfo.shiftForce;
             uint8_t bit = 1 << bitNumber;
             if (isPress) {
-                machine->keys[byteIndex] |= bit;
+                gMachine.keys[byteIndex] |= bit;
             } else {
-                machine->keys[byteIndex] &= ~bit;
+                gMachine.keys[byteIndex] &= ~bit;
             }
         }
     }
@@ -306,14 +284,14 @@ static bool processKeyQueue(Trs80Machine *machine) {
 // bits in the address map to the various bytes, and you can read the OR'ed
 // addresses to read more than one byte at a time. For the last byte we fake
 // the Shift key if necessary.
-static uint8_t readKeyboard(Trs80Machine *machine, uint16_t addr) {
+static uint8_t readKeyboard(uint16_t addr) {
     addr = (addr - Trs80KeyboardBegin) % Trs80KeyboardBankSize;
 
     // Dequeue if necessary.
-    if (machine->clock > machine->keyProcessMinClock) {
-        bool keyWasPressed = processKeyQueue(machine);
+    if (gMachine.clock > gMachine.keyProcessMinClock) {
+        bool keyWasPressed = processKeyQueue();
         if (keyWasPressed) {
-            machine->keyProcessMinClock = machine->clock + Trs80KeyboardThrottleCycles;
+            gMachine.keyProcessMinClock = gMachine.clock + Trs80KeyboardThrottleCycles;
         }
     }
 
@@ -324,11 +302,11 @@ static uint8_t readKeyboard(Trs80Machine *machine, uint16_t addr) {
     uint8_t b = 0;
     for (int i = 0; i < 8; i++) {
         if ((addr & (1 << i)) != 0) {
-            uint8_t keys = machine->keys[i];
+            uint8_t keys = gMachine.keys[i];
 
             if (i == 7) {
                 // Modify keys based on the shift force.
-                switch (machine->shiftForce) {
+                switch (gMachine.shiftForce) {
                     case ST_NEUTRAL:
                         // Nothing.
                         break;
@@ -352,80 +330,80 @@ static uint8_t readKeyboard(Trs80Machine *machine, uint16_t addr) {
 }
 
 // Handle a keypress on the real machine, update memory-mapped I/O.
-static void handleKeypress(Trs80Machine *machine, int key, bool isPress) {
-    machine->keyQueue.emplace_back(key, isPress);
+void handleKeypress(int key, bool isPress) {
+    gMachine.keyQueue.emplace_back(key, isPress);
 }
 
 /**
  * Set the mask for IRQ (regular) interrupts.
  */
-static void setIrqMask(Trs80Machine *machine, uint8_t irqMask) {
-    machine->irqMask = irqMask;
+static void setIrqMask(uint8_t irqMask) {
+    gMachine.irqMask = irqMask;
 }
 
 // Reset whether we've seen this NMI interrupt if the mask and latch no longer overlap.
-static void updateNmiSeen(Trs80Machine *machine) {
-    if ((machine->nmiLatch & machine->nmiMask) == 0) {
-        machine->nmiSeen = false;
+static void updateNmiSeen() {
+    if ((gMachine.nmiLatch & gMachine.nmiMask) == 0) {
+        gMachine.nmiSeen = false;
     }
 }
 
 /**
  * Set the mask for non-maskable interrupts. (Yes.)
  */
-static void setNmiMask(Trs80Machine *machine, uint8_t nmiMask) {
+static void setNmiMask(uint8_t nmiMask) {
     // Reset is always allowed:
-    machine->nmiMask = nmiMask | RESET_NMI_MASK;
-    updateNmiSeen(machine);
+    gMachine.nmiMask = nmiMask | RESET_NMI_MASK;
+    updateNmiSeen();
 }
 
-static uint8_t interruptLatchRead(Trs80Machine *machine) {
-    return ~machine->irqLatch;
+static uint8_t interruptLatchRead() {
+    return ~gMachine.irqLatch;
 }
 
 // Set or reset the timer interrupt.
-void setTimerInterrupt(Trs80Machine *machine, bool state) {
+void setTimerInterrupt(bool state) {
     if (state) {
-        machine->irqLatch |= M3_TIMER_IRQ_MASK;
+        gMachine.irqLatch |= M3_TIMER_IRQ_MASK;
     } else {
-        machine->irqLatch &= ~M3_TIMER_IRQ_MASK;
+        gMachine.irqLatch &= ~M3_TIMER_IRQ_MASK;
     }
 }
 
 // Set the state of the reset button interrupt.
-void resetButtonInterrupt(Trs80Machine *machine, bool state) {
+void resetButtonInterrupt(bool state) {
     if (state) {
-        machine->nmiLatch |= RESET_NMI_MASK;
+        gMachine.nmiLatch |= RESET_NMI_MASK;
     } else {
-        machine->nmiLatch &= ~RESET_NMI_MASK;
+        gMachine.nmiLatch &= ~RESET_NMI_MASK;
     }
-    updateNmiSeen(machine);
+    updateNmiSeen();
 }
 
 // What to do when the hardware timer goes off.
-static void handleTimer(Trs80Machine *machine) {
-    setTimerInterrupt(machine, true);
+static void handleTimer() {
+    setTimerInterrupt(true);
 }
 
-static void resetMachine(Trs80Machine *machine) {
-    machine->clock = 0;
-    machine->modeImage = 0x80;
-    setIrqMask(machine, 0);
-    machine->irqLatch = 0;
-    setNmiMask(machine, 0);
-    machine->nmiLatch = 0;
-    // resetCassette(machine);
-    clearKeyboard(machine);
-    setTimerInterrupt(machine, false);
-    Z80Reset(&machine->z80);
+static void resetMachine() {
+    gMachine.clock = 0;
+    gMachine.modeImage = 0x80;
+    setIrqMask(0);
+    gMachine.irqLatch = 0;
+    setNmiMask(0);
+    gMachine.nmiLatch = 0;
+    // resetCassette();
+    clearKeyboard();
+    setTimerInterrupt(false);
+    Z80Reset(&gMachine.z80);
 }
 
 uint8_t Trs80ReadByte(Trs80Machine *machine, uint16_t address) {
     if (address >= Trs80KeyboardBegin && address < Trs80KeyboardEnd) {
-        return readKeyboard(machine, address);
+        return readKeyboard(address);
     }
 
-    return machine->memory[address];
+    return gMachine.memory[address];
 }
 
 void Trs80WriteByte(Trs80Machine *machine, uint16_t address, uint8_t value) {
@@ -433,7 +411,7 @@ void Trs80WriteByte(Trs80Machine *machine, uint16_t address, uint8_t value) {
         if (address >= Trs80ScreenBegin && address < Trs80ScreenEnd) {
             writeScreenChar(address - Trs80ScreenBegin, value);
         }
-        machine->memory[address] = value;
+        gMachine.memory[address] = value;
     }
 }
 
@@ -443,12 +421,12 @@ uint8_t Trs80ReadPort(Trs80Machine *machine, uint8_t address) {
     switch (address) {
         case 0xE0:
             // IRQ latch read.
-            value = interruptLatchRead(machine);
+            value = interruptLatchRead();
             break;
 
         case 0xE4:
             // NMI latch read.
-            value = ~machine->nmiLatch;
+            value = ~gMachine.nmiLatch;
             break;
 
         case 0xEC:
@@ -456,7 +434,7 @@ uint8_t Trs80ReadPort(Trs80Machine *machine, uint8_t address) {
         case 0xEE:
         case 0xEF:
             // Acknowledge timer.
-            setTimerInterrupt(machine, false);
+            setTimerInterrupt(false);
             break;
 
         case 0xF8:
@@ -466,7 +444,7 @@ uint8_t Trs80ReadPort(Trs80Machine *machine, uint8_t address) {
 
         case 0xFF:
             // Cassette and various flags.
-            value = machine->modeImage & 0x7E;
+            value = gMachine.modeImage & 0x7E;
             // value |= this.getCassetteByte();
             break;
     }
@@ -486,7 +464,7 @@ void Trs80WritePort(Trs80Machine *machine, uint8_t address, uint8_t value) {
     switch (address) {
         case 0xE0:
             // Set interrupt mask.
-            setIrqMask(machine, value);
+            setIrqMask(value);
             break;
 
         case 0xE4:
@@ -494,7 +472,7 @@ void Trs80WritePort(Trs80Machine *machine, uint8_t address, uint8_t value) {
         case 0xE6:
         case 0xE7:
             // Set NMI state.
-            setNmiMask(machine, value);
+            setNmiMask(value);
             break;
 
         case 0xEC:
@@ -502,7 +480,7 @@ void Trs80WritePort(Trs80Machine *machine, uint8_t address, uint8_t value) {
         case 0xEE:
         case 0xEF:
             // Various controls.
-            machine->modeImage = value;
+            gMachine.modeImage = value;
             // this.setCassetteMotor((value & 0x02) != 0);
             // this.screen.setExpandedCharacters((value & 0x04) != 0);
             // this.screen.setAlternateCharacters((value & 0x08) == 0);
@@ -510,24 +488,24 @@ void Trs80WritePort(Trs80Machine *machine, uint8_t address, uint8_t value) {
     }
 }
 
-void queueKey(long long microseconds, uint8_t ch) {
-    gQueuedKeyEvents.emplace_back(microseconds, ch);
+void queueEvent(float seconds, void (*callback)(int data), int data) {
+    clk_t clock = gMachine.clock + seconds*Trs80ClockHz;
+    gQueuedEvents.emplace_back(clock, callback, data);
 }
 
 int trs80_main()
 {
     bool quit = false;
-    Trs80Machine *machine = new Trs80Machine;
 
     // Read the ROM.
     if (MODEL3_ROM_SIZE != ROMSIZE) {
         printf("ROM is wrong size (%zd bytes)\n", MODEL3_ROM_SIZE);
         while (1) {}
     }
-    memcpy(machine->memory, MODEL3_ROM, MODEL3_ROM_SIZE);
+    memcpy(gMachine.memory, MODEL3_ROM, MODEL3_ROM_SIZE);
 
-    initializeKeyboardMap(machine);
-    resetMachine(machine);
+    initializeKeyboardMap();
+    resetMachine();
 
     clk_t previousTimerClock = 0;
 
@@ -538,8 +516,8 @@ int trs80_main()
 
         // See if we should interrupt the emulator early for our timer interrupt.
         clk_t nextTimerClock = previousTimerClock + Trs80ClockHz / Trs80TimerHz;
-        if (nextTimerClock >= machine->clock) {
-            clk_t clocksUntilTimer = nextTimerClock - machine->clock;
+        if (nextTimerClock >= gMachine.clock) {
+            clk_t clocksUntilTimer = nextTimerClock - gMachine.clock;
             if (cyclesToDo > clocksUntilTimer) {
                 cyclesToDo = clocksUntilTimer;
             }
@@ -548,59 +526,50 @@ int trs80_main()
         // See if we should slow down if we're going too fast.
         auto now = std::chrono::system_clock::now();
         auto microsSinceStart = std::chrono::duration_cast<std::chrono::microseconds>(now - emulationStartTime);
-        if (!gQueuedKeyEvents.empty() && gQueuedKeyEvents[0].microseconds < microsSinceStart.count()) {
-            printf("Inserting key event (%d) (%llu < %llu)\n", 
-                    gQueuedKeyEvents[0].ch,
-                    gQueuedKeyEvents[0].microseconds,
-                    microsSinceStart.count());
-            handleKeypress(machine, gQueuedKeyEvents[0].ch, true);
-            handleKeypress(machine, gQueuedKeyEvents[0].ch, false);
-            gQueuedKeyEvents.erase(gQueuedKeyEvents.begin());
-        }
         clk_t expectedClock = Trs80ClockHz * microsSinceStart.count() / 1000000;
-        if (expectedClock < machine->clock) {
+        if (expectedClock < gMachine.clock) {
 #if 0
             printf("Skipping because %lld < %lld (%d left)\n",
-                    expectedClock, machine->clock, machine->clock - expectedClock);
+                    expectedClock, gMachine.clock, gMachine.clock - expectedClock);
 #endif
             continue;
         }
 
         // Emulate!
-        int doneCycles = Z80Emulate(&machine->z80, cyclesToDo, machine);
-        machine->clock += doneCycles;
+        int doneCycles = Z80Emulate(&gMachine.z80, cyclesToDo, &gMachine);
+        gMachine.clock += doneCycles;
 #if 0
-        printf("E %llu 0x%04X %lld %d\n", machine->clock, machine->z80.pc, cyclesToDo, doneCycles);
+        printf("E %llu 0x%04X %lld %d\n", gMachine.clock, gMachine.z80.pc, cyclesToDo, doneCycles);
 #endif
 
         // Handle non-maskable interrupts.
-        if ((machine->nmiLatch & machine->nmiMask) != 0 && !machine->nmiSeen) {
+        if ((gMachine.nmiLatch & gMachine.nmiMask) != 0 && !gMachine.nmiSeen) {
 #if 0
-            printf("N %llu 0x%04X\n", machine->clock, machine->z80.pc);
+            printf("N %llu 0x%04X\n", gMachine.clock, gMachine.z80.pc);
 #endif
-            machine->clock += Z80NonMaskableInterrupt(&machine->z80, machine);
-            machine->nmiSeen = true;
+            gMachine.clock += Z80NonMaskableInterrupt(&gMachine.z80, &gMachine);
+            gMachine.nmiSeen = true;
 
             // Simulate the reset button being released.
-            resetButtonInterrupt(machine, false);
+            resetButtonInterrupt(false);
         }
 
         // Handle interrupts.
-        if ((machine->irqLatch & machine->irqMask) != 0) {
+        if ((gMachine.irqLatch & gMachine.irqMask) != 0) {
 #if 0
-            printf("I %llu 0x%04X 0x%02X 0x%02X %d\n", machine->clock, machine->z80.pc,
-                    machine->irqLatch, machine->irqMask, machine->z80.iff1);
+            printf("I %llu 0x%04X 0x%02X 0x%02X %d\n", gMachine.clock, gMachine.z80.pc,
+                    gMachine.irqLatch, gMachine.irqMask, gMachine.z80.iff1);
 #endif
-            machine->clock += Z80Interrupt(&machine->z80, 0, machine);
+            gMachine.clock += Z80Interrupt(&gMachine.z80, 0, &gMachine);
         }
 
         // Set off a timer interrupt.
-        if (machine->clock > nextTimerClock) {
+        if (gMachine.clock > nextTimerClock) {
 #if 0
-            printf("T %llu 0x%04X\n", machine->clock, machine->z80.pc);
+            printf("T %llu 0x%04X\n", gMachine.clock, gMachine.z80.pc);
 #endif
-            handleTimer(machine);
-            previousTimerClock = machine->clock;
+            handleTimer();
+            previousTimerClock = gMachine.clock;
         }
 
         // Check user input.
@@ -612,7 +581,7 @@ int trs80_main()
             switch(ev.eventType) {
                 case RoEvent::KEYBOARD_RAW: {
                     const struct KeyboardRawEvent raw = ev.u.keyboardRaw;
-                    handleKeypress(machine, raw.key, raw.isPress);
+                    handleKeypress(raw.key, raw.isPress);
                     break;
                 }
                 
@@ -623,6 +592,15 @@ int trs80_main()
         }
         RoDoHousekeeping();
         */
+
+        if (!gQueuedEvents.empty() && gQueuedEvents[0].clock < gMachine.clock) {
+            QueuedEvent *e = &gQueuedEvents.front();
+
+            printf("Calling event (%d) (%llu < %llu)\n", 
+                    e->data, e->clock, gMachine.clock);
+            e->callback(e->data);
+            gQueuedEvents.erase(gQueuedEvents.begin());
+        }
     }
 
     return 0;
