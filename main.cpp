@@ -17,8 +17,6 @@
 #define TFT_RST         21
 #define TFT_CS          17
 
-#define TFT_WIDTH       320
-#define TFT_HEIGHT      240
 #define TFT_ROTATION    1
 
 #define CMD_LOAD_BLOCK 0x01
@@ -36,6 +34,13 @@
 
 const uint LED_PIN = 25;
 
+#define FONT_CHAR_COUNT 256
+#define FONT_WIDTH 4
+#define FONT_HEIGHT 12
+#define FONT_CHAR_SIZE (FONT_WIDTH*FONT_HEIGHT)
+
+static uint16_t gFontGlyphs[FONT_CHAR_COUNT*FONT_CHAR_SIZE];
+
 static uint16_t COLORS[4] = {
     RGB888TO565(0x00, 0x00, 0x00),
     RGB888TO565(0x80, 0x80, 0x80),
@@ -50,6 +55,20 @@ void configure_lcd() {
     LCD_fillRect(0, 0, LCD_getWidth(), LCD_getHeight(), BACKGROUND);
 }
 
+void prepareFontBitmaps() {
+    uint16_t *p = gFontGlyphs;
+
+    for (int ch = 0; ch < FONT_CHAR_COUNT; ch++) {
+        for (int y = 0; y < FONT_HEIGHT; y++) {
+            uint8_t b = Trs80FontBits[ch*FONT_HEIGHT + y];
+            for (int x = 0; x < FONT_WIDTH; x++) {
+                int gray = (b >> (x*2)) & 0x03;
+                *p++ = COLORS[gray];
+            }
+        }
+    }
+}
+
 void writeScreenChar(int position, uint8_t ch) {
 #if 0
     if (ch > 32 && ch < 128) {
@@ -59,15 +78,12 @@ void writeScreenChar(int position, uint8_t ch) {
     int textCol = position % 64;
     int textRow = position / 64;
 
-    int ox = HMARGIN + textCol*4;
-    int oy = VMARGIN + textRow*12;
-    for (int y = 0; y < 12; y++) {
-        unsigned char b = Trs80FontBits[ch*12 + y];
-        for (int x = 0; x < 4; x++) {
-            int gray = (b >> (x*2)) & 0x03;
-            LCD_writePixel(ox + x, oy + y, COLORS[gray]);
-        }
-    }
+    LCD_writeBitmap(
+            HMARGIN + textCol*FONT_WIDTH,
+            VMARGIN + textRow*FONT_HEIGHT,
+            FONT_WIDTH,
+            FONT_HEIGHT,
+            &gFontGlyphs[ch*FONT_CHAR_SIZE]);
 }
 
 void keyCallback(int ch) {
@@ -145,14 +161,17 @@ int main() {
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
+    prepareFontBitmaps();
     configure_lcd();
 
-#if 1
+#if 0
     queueEvent(1, keyCallback, 'L');
     queueEvent(2, keyCallback, '0');
     queueEvent(3, keyCallback, '\n');
     queueEvent(4, runCmdProgram, 0);
 #endif
+
+    queueEvent(0.1, runCmdProgram, 0);
 
     trs80_main();
 }

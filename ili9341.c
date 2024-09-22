@@ -19,6 +19,22 @@ uint16_t ili9341_pinTX = PICO_DEFAULT_SPI_TX_PIN;
 static uint gDmaChannel;
 static dma_channel_config gDmaConfig;
 
+// Clean up SPI after a DMA write. This code is copied from spi_write16_blocking().
+static void flush_spi(spi_inst_t *spi) {
+    while (spi_is_readable(spi)) {
+        (void)spi_get_hw(spi)->dr;
+    }
+    while (spi_get_hw(spi)->sr & SPI_SSPSR_BSY_BITS) {
+        tight_loop_contents();
+    }
+    while (spi_is_readable(spi)) {
+        (void)spi_get_hw(spi)->dr;
+    }
+
+    // Don't leave overrun flag set
+    spi_get_hw(spi)->icr = SPI_SSPICR_RORIC_BITS;
+}
+
 const uint8_t initcmd[] = {
 	24, //24 commands
 	0xEF, 3, 0x03, 0x80, 0x02,
@@ -235,14 +251,20 @@ void LCD_writeBitmap(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t *b
 	ILI9341_RegData();
 	spi_set_format(ili9341_spi, 16, SPI_CPOL_1, SPI_CPOL_1, SPI_MSB_FIRST);
 
+#if 1
         channel_config_set_read_increment(&gDmaConfig, true);
         channel_config_set_write_increment(&gDmaConfig, false);
 	dma_channel_configure(gDmaChannel, &gDmaConfig,
                 &spi_get_hw(ili9341_spi)->dr,
                 bitmap,
-                (int) w * h,
+                (uint) w * h,
                 true);
 	dma_channel_wait_for_finish_blocking(gDmaChannel);
+
+        flush_spi(ili9341_spi);
+#else
+        spi_write16_blocking(ili9341_spi, bitmap, (size_t) w*h);
+#endif
 
 	ILI9341_DeSelect();
 }
@@ -262,6 +284,8 @@ void LCD_fillRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t color
                 (int) w * h,
                 true);
 	dma_channel_wait_for_finish_blocking(gDmaChannel);
+
+        flush_spi(ili9341_spi);
 
 	ILI9341_DeSelect();
 }
