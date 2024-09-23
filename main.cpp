@@ -29,8 +29,12 @@
 #define BACKGROUND RGB888TO565(0x00, 0x00, 0x00)
 #define FOREGROUND RGB888TO565(0xFF, 0xFF, 0xFF)
 
-#define HMARGIN 32
-#define VMARGIN 24
+// Centered:
+// #define LEFT_MARGIN 32
+// #define TOP_MARGIN 24
+// Screen in upper-left of display:
+#define LEFT_MARGIN 0
+#define TOP_MARGIN 0
 
 const uint LED_PIN = 25;
 
@@ -79,8 +83,8 @@ void writeScreenChar(int position, uint8_t ch) {
     int textRow = position / 64;
 
     LCD_writeBitmap(
-            HMARGIN + textCol*FONT_WIDTH,
-            VMARGIN + textRow*FONT_HEIGHT,
+            LEFT_MARGIN + textCol*FONT_WIDTH,
+            TOP_MARGIN + textRow*FONT_HEIGHT,
             FONT_WIDTH,
             FONT_HEIGHT,
             &gFontGlyphs[ch*FONT_CHAR_SIZE]);
@@ -127,7 +131,7 @@ void runCmdProgram(int program) {
             case CMD_LOAD_BLOCK: {
                 uint16_t address = data[0] | (data[1] << 8);
                 int dataLength = chunkLength - 2;
-                printf("CMD loading %d bytes at 0x%04X\n", dataLength, address);
+                // printf("CMD loading %d bytes at 0x%04X\n", dataLength, address);
                 for (int i = 0; i < dataLength; i++) {
                     writeMemoryByte(address + i, data[2 + i]);
                 }
@@ -136,7 +140,7 @@ void runCmdProgram(int program) {
 
             case CMD_TRANSFER_ADDRESS: {
                 uint16_t address = data[0] | (data[1] << 8);
-                printf("CMD jumping to 0x%04X\n", address);
+                // printf("CMD jumping to 0x%04X\n", address);
                 jumpToAddress(address);
                 // Stop parsing.
                 return;
@@ -144,7 +148,7 @@ void runCmdProgram(int program) {
 
             case CMD_LOAD_MODULE_HEADER: {
                 std::string name((char *) data, chunkLength);
-                printf("CMD loading \"%s\"\n", name.c_str());
+                // printf("CMD loading \"%s\"\n", name.c_str());
                 break;
             }
 

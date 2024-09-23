@@ -1,0 +1,5 @@
+#!/bin/bash
+
+~/others/simple-serial-terminal/serial --lk /dev/tty.usbmodem11301 1200
+sleep 2
+cp build/mini-model-3.uf2 /Volumes/RPI-RP2
