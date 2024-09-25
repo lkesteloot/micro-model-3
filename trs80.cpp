@@ -119,6 +119,8 @@ typedef struct Trs80Machine {
     // We queue up key events so that we don't overwhelm the ROM polling
     // routines.
     std::deque<KeyEvent> keyQueue;
+    // See JOYSTICK_*_MASK:
+    uint8_t joystick{};
 
     // Which IRQs should be handled.
     uint8_t irqMask;
@@ -142,8 +144,10 @@ static void initializeKeyboardMap() {
     auto &m = gMachine.keyMap;
 
     m['0'] = { 4, 0, ST_NEUTRAL, 5, 1, ST_FORCE_DOWN };
+    m['1'] = { 4, 1 };
     m['L'] = { 1, 4 };
     m['\n'] = { 6, 0, ST_NEUTRAL };
+    m['\\'] = { 6, 1, ST_NEUTRAL, KEYBOARD_IGNORE }; // Clear
 
     /*
     m[KEYCAP_A] = { 0, 1 };
@@ -304,6 +308,10 @@ static uint8_t readKeyboard(uint16_t addr) {
         if ((addr & (1 << i)) != 0) {
             uint8_t keys = gMachine.keys[i];
 
+            if (i == 6) {
+                keys |= gMachine.joystick;
+            }
+
             if (i == 7) {
                 // Modify keys based on the shift force.
                 switch (gMachine.shiftForce) {
@@ -324,6 +332,10 @@ static uint8_t readKeyboard(uint16_t addr) {
 
             b |= keys;
         }
+    }
+
+    if (b != 0) {
+        printf("Reading keyboard at 0x%04x got 0x%02x\n", addr, b);
     }
 
     return b;
@@ -600,6 +612,9 @@ int trs80_main()
         }
         RoDoHousekeeping();
         */
+
+        gMachine.joystick = readJoystick();
+        // printf("%x\n", gMachine.joystick);
 
         if (!gQueuedEvents.empty() && gQueuedEvents[0].clock < gMachine.clock) {
             QueuedEvent *e = &gQueuedEvents.front();

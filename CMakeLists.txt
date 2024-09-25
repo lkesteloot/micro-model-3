@@ -16,6 +16,7 @@ add_executable(mini-model-3
     model3_rom.c
     ili9341.c
     obstacle_run_cmd.c
+    splash.cpp
 )
 
 # Serial output via USB:

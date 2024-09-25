@@ -10,6 +10,7 @@
 #include "main.h"
 #include "fonts.h"
 #include "obstacle_run_cmd.h"
+#include "splash.h"
 
 #define TFT_SCLK        18
 #define TFT_MOSI        19
@@ -19,10 +20,12 @@
 
 #define TFT_ROTATION    1
 
+#define SCREEN_WIDTH 64
+#define SCREEN_HEIGHT 16
+
 #define CMD_LOAD_BLOCK 0x01
 #define CMD_TRANSFER_ADDRESS 0x02
 #define CMD_LOAD_MODULE_HEADER 0x05
-
 
 // Colors are in 565 (FFFF) format. To convert from RGB888 to RGB565, use:
 #define RGB888TO565(r, g, b) ((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
@@ -38,6 +41,12 @@
 
 const uint LED_PIN = 25;
 
+#define JOYSTICK_UP_PIN 6
+#define JOYSTICK_DOWN_PIN 2
+#define JOYSTICK_LEFT_PIN 3
+#define JOYSTICK_RIGHT_PIN 4
+#define JOYSTICK_FIRE_PIN 5
+
 #define FONT_CHAR_COUNT 256
 #define FONT_WIDTH 4
 #define FONT_HEIGHT 12
@@ -52,7 +61,7 @@ static uint16_t COLORS[4] = {
     RGB888TO565(0xFF, 0xFF, 0xFF),
 };
 
-void configure_lcd() {
+void configureLcd() {
     LCD_setPins(TFT_DC, TFT_CS, TFT_RST, TFT_SCLK, TFT_MOSI);
     LCD_initDisplay();
     LCD_setRotation(TFT_ROTATION);
@@ -73,21 +82,50 @@ void prepareFontBitmaps() {
     }
 }
 
-void writeScreenChar(int position, uint8_t ch) {
-#if 0
-    if (ch > 32 && ch < 128) {
-        printf("%4d %c\n", position, ch);
-    }
-#endif
-    int textCol = position % 64;
-    int textRow = position / 64;
-
+void writeScreenChar(int x, int y, uint8_t ch) {
     LCD_writeBitmap(
-            LEFT_MARGIN + textCol*FONT_WIDTH,
-            TOP_MARGIN + textRow*FONT_HEIGHT,
+            LEFT_MARGIN + x*FONT_WIDTH,
+            TOP_MARGIN + y*FONT_HEIGHT,
             FONT_WIDTH,
             FONT_HEIGHT,
             &gFontGlyphs[ch*FONT_CHAR_SIZE]);
+}
+
+void writeScreenChar(int position, uint8_t ch) {
+    int x = position % SCREEN_WIDTH;
+    int y = position / SCREEN_WIDTH;
+    writeScreenChar(x, y, ch);
+}
+
+void showSplashScreen() {
+    int marginLines = SCREEN_HEIGHT - SPLASH_NUM_LINES;
+    int topMarginLines = marginLines / 2;
+    int bottomMarginLines = marginLines - topMarginLines;
+    uint16_t addr = 15360;
+
+    // Top margin.
+    for (int line = 0; line < topMarginLines; line++) {
+        for (int x = 0; x < SCREEN_WIDTH; x++) {
+            writeMemoryByte(addr++, ' ');
+        }
+    }
+
+    // Screen.
+    uint8_t *s = SPLASH;
+    for (int line = 0; line < SPLASH_NUM_LINES; line++) {
+        for (int x = 0; x < SCREEN_WIDTH; x++) {
+            writeMemoryByte(addr++, *s++);
+        }
+    }
+
+    // Bottom margin.
+    for (int line = 0; line < bottomMarginLines; line++) {
+        for (int x = 0; x < SCREEN_WIDTH; x++) {
+            writeMemoryByte(addr++, ' ');
+        }
+    }
+
+    sleep_ms(2000);
 }
 
 void keyCallback(int ch) {
@@ -98,6 +136,8 @@ void keyCallback(int ch) {
 void runCmdProgram(int program) {
     int size;
     uint8_t *binary;
+
+    showSplashScreen();
 
     switch (program) {
         case 0:
@@ -159,23 +199,51 @@ void runCmdProgram(int program) {
     }
 }
 
+uint8_t readJoystick() {
+    return
+        (gpio_get(JOYSTICK_UP_PIN) ? 0 : JOYSTICK_UP_MASK) |
+        (gpio_get(JOYSTICK_DOWN_PIN) ? 0 : JOYSTICK_DOWN_MASK) |
+        (gpio_get(JOYSTICK_LEFT_PIN) ? 0 : JOYSTICK_LEFT_MASK) |
+        (gpio_get(JOYSTICK_RIGHT_PIN) ? 0 : JOYSTICK_RIGHT_MASK) |
+        (gpio_get(JOYSTICK_FIRE_PIN) ? 0 : JOYSTICK_FIRE_MASK);
+}
+
 int main() {
     stdio_init_all();
 
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
+    gpio_init(JOYSTICK_UP_PIN);
+    gpio_set_dir(JOYSTICK_UP_PIN, GPIO_IN);
+    gpio_pull_up(JOYSTICK_UP_PIN);
+    gpio_init(JOYSTICK_DOWN_PIN);
+    gpio_set_dir(JOYSTICK_DOWN_PIN, GPIO_IN);
+    gpio_pull_up(JOYSTICK_DOWN_PIN);
+    gpio_init(JOYSTICK_LEFT_PIN);
+    gpio_set_dir(JOYSTICK_LEFT_PIN, GPIO_IN);
+    gpio_pull_up(JOYSTICK_LEFT_PIN);
+    gpio_init(JOYSTICK_RIGHT_PIN);
+    gpio_set_dir(JOYSTICK_RIGHT_PIN, GPIO_IN);
+    gpio_pull_up(JOYSTICK_RIGHT_PIN);
+    gpio_init(JOYSTICK_FIRE_PIN);
+    gpio_set_dir(JOYSTICK_FIRE_PIN, GPIO_IN);
+    gpio_pull_up(JOYSTICK_FIRE_PIN);
+
     prepareFontBitmaps();
-    configure_lcd();
+    configureLcd();
 
 #if 0
+    // Basic ROM:
     queueEvent(1, keyCallback, 'L');
     queueEvent(2, keyCallback, '0');
     queueEvent(3, keyCallback, '\n');
-    queueEvent(4, runCmdProgram, 0);
 #endif
 
+    // Obstacle Run:
     queueEvent(0.1, runCmdProgram, 0);
+    queueEvent(10, keyCallback, '\\'); // Clear.
+    queueEvent(20, keyCallback, '1');
 
     trs80_main();
 }
