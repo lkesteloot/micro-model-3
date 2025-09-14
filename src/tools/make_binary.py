@@ -1,4 +1,12 @@
 
+#
+# Makes .c and .h files with bytes from a binary file.
+#
+# Usage:
+#
+#     make_binary.py BINARY_FILENAME
+#
+
 import sys
 from itertools import batched
 
