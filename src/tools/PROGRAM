@@ -2,12 +2,13 @@
 
 DEVICE=/dev/tty.usbmodem1301
 
-# This puts the Pico into program mode.
-~/others/simple-serial-terminal/serial --monitor $DEVICE 1200
+# https://github.com/bradgrantham/simple-serial-terminal
+echo "Putting Pico in program mode..."
+~/others/simple-serial-terminal/serial --monitor --expect-disconnect $DEVICE 1200
 
-# Wait for it to be ready and mount the volume.
+echo "Waiting for Pico to restart..."
 sleep 2
 
-# Copy our binary to its volume.
+echo "Programming pico..."
 cp build/micro-model-3.uf2 /Volumes/RPI-RP2
 
