@@ -22,6 +22,8 @@ add_executable(micro-model-3
     src/generated/model3_rom.c
     src/generated/obstacle_run_cmd.c
     src/generated/scarfman2_cmd.c
+    src/generated/defense_command_cmd.c
+    src/generated/sea_dragon_cmd.c
     src/generated/splash.cpp
 )
 

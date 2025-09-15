@@ -1,6 +1,8 @@
-#include <stdio.h>
-#include <string.h>
+#include <cstdio>
+#include <cstring>
 #include <string>
+#include <vector>
+
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "pico/binary_info.h"
@@ -11,6 +13,8 @@
 #include "fonts.h"
 #include "obstacle_run_cmd.h"
 #include "scarfman2_cmd.h"
+#include "defense_command_cmd.h"
+#include "sea_dragon_cmd.h"
 #include "splash.h"
 
 #define TFT_SCLK        18
@@ -53,6 +57,24 @@ const uint LED_PIN = 25;
 #define FONT_HEIGHT 12
 #define FONT_CHAR_SIZE (FONT_WIDTH*FONT_HEIGHT)
 
+/**
+ * A key we should handle in a menu.
+ */
+struct MenuKey {
+    // The text to recognize on the screen.
+    const char *text;
+    // Where on the screen it is.
+    int position;
+    // Key to map the fire button to if the text is at this location.
+    char key;
+};
+
+struct Game {
+    size_t cmdSize;
+    uint8_t *cmd;
+    std::vector<MenuKey> menuKeys;
+};
+
 namespace {
     uint16_t gFontGlyphs[FONT_CHAR_COUNT*FONT_CHAR_SIZE];
 
@@ -66,6 +88,83 @@ namespace {
     bool mFirePressed = false;
     bool mFireSwallowed = false;
 
+    const std::vector<Game> gGameList = {
+        {
+            .cmdSize = OBSTACLE_RUN_CMD_SIZE,
+            .cmd = OBSTACLE_RUN_CMD,
+            .menuKeys = {
+                {
+                    // Main menu, press Clear to start game.
+                    .text = "YOU ARE",
+                    .position = 0x0055,
+                    .key = '\\',
+                },
+                {
+                    // Instructions screen, press Clear to start game.
+                    .text = "OBSTACLE RUN",
+                    .position = 0x0092,
+                    .key = '\\',
+                },
+                {
+                    // Player menu, press "1" to start game.
+                    .text = "Enter number of players",
+                    .position = 0x020F,
+                    .key = '1',
+                },
+            },
+        },
+        {
+            .cmdSize = SCARFMAN2_CMD_SIZE,
+            .cmd = SCARFMAN2_CMD,
+            .menuKeys = {
+                {
+                    // Scarfman end of game, press Enter to restart.
+                    .text = "G A M E   O V E R",
+                    .position = 0x0157,
+                    .key = '\n',
+                },
+            },
+        },
+        {
+            .cmdSize = DEFENSE_COMMAND_CMD_SIZE,
+            .cmd = DEFENSE_COMMAND_CMD,
+            .menuKeys = {
+                {
+                    // Splash screen, 1 player to begin.
+                    .text = "Players to Start the Game",
+                    .position = 0x039C,
+                    .key = '1',
+                },
+            },
+        },
+        {
+            .cmdSize = SEA_DRAGON_CMD_SIZE,
+            .cmd = SEA_DRAGON_CMD,
+            .menuKeys = {
+                {
+                    // Splash screen, Enter to begin.
+                    .text = "to Begin",
+                    .position = 0x0321,
+                    .key = '\n',
+                },
+                {
+                    // Player menu, press "1" to start game.
+                    .text = "1 or 2 Players?",
+                    .position = 0x0358,
+                    .key = '1',
+                },
+                {
+                    // Skill level, 0 for novice.
+                    .text = "Skill level",
+                    .position = 0x0315,
+                    .key = '0',
+                },
+            },
+        },
+    };
+    // Current game.
+    Game const *mGame = nullptr;
+
     void configureGpio() {
         gpio_init(LED_PIN);
         gpio_set_dir(LED_PIN, GPIO_OUT);
@@ -73,15 +172,19 @@ namespace {
         gpio_init(JOYSTICK_UP_PIN);
         gpio_set_dir(JOYSTICK_UP_PIN, GPIO_IN);
         gpio_pull_up(JOYSTICK_UP_PIN);
+
         gpio_init(JOYSTICK_DOWN_PIN);
         gpio_set_dir(JOYSTICK_DOWN_PIN, GPIO_IN);
         gpio_pull_up(JOYSTICK_DOWN_PIN);
+
         gpio_init(JOYSTICK_LEFT_PIN);
         gpio_set_dir(JOYSTICK_LEFT_PIN, GPIO_IN);
         gpio_pull_up(JOYSTICK_LEFT_PIN);
+
         gpio_init(JOYSTICK_RIGHT_PIN);
         gpio_set_dir(JOYSTICK_RIGHT_PIN, GPIO_IN);
         gpio_pull_up(JOYSTICK_RIGHT_PIN);
+
         gpio_init(JOYSTICK_FIRE_PIN);
         gpio_set_dir(JOYSTICK_FIRE_PIN, GPIO_IN);
         gpio_pull_up(JOYSTICK_FIRE_PIN);
@@ -145,23 +248,16 @@ namespace {
     }
 
     void runCmdProgram(int program) {
-        int size;
-        uint8_t *binary;
-
         showSplashScreen();
 
-        switch (program) {
-            case 0:
-            default:
-                size = OBSTACLE_RUN_CMD_SIZE;
-                binary = OBSTACLE_RUN_CMD;
-                break;
-
-            case 1:
-                size = SCARFMAN2_CMD_SIZE;
-                binary = SCARFMAN2_CMD;
-                break;
+        if (program < 0 || program >= gGameList.size()) {
+            program = 0;
         }
+
+        mGame = &gGameList[program];
+
+        int size = mGame->cmdSize;
+        uint8_t *binary = mGame->cmd;
 
         int i = 0;
         while (true) {
@@ -224,18 +320,18 @@ namespace {
     }
 
     /**
-     * Whether the string is at the given index (within the screen).
+     * Whether the string is at the given position (within the screen).
      */
-    bool textIsAt(char const *s, int index) {
+    bool textIsAt(char const *s, int position) {
         // printf("textIsAt()\n");
         while (*s != '\0') {
-            uint8_t mem = readMemoryByte(15360 + index);
-            // printf("    index = %04x, s = %d, screen = %d\n", index, (int) *s, (int) mem);
+            uint8_t mem = readMemoryByte(15360 + position);
+            // printf("    position = %04x, s = %d, screen = %d\n", position, (int) *s, (int) mem);
             if (normalizeChar(mem) != normalizeChar(*s)) {
                 return false;
             }
             s += 1;
-            index += 1;
+            position += 1;
         }
         return true;
     }
@@ -266,26 +362,16 @@ void pollInput() {
 
     // Simulate various keys.
     if (fire) {
-        if (!mFirePressed) {
+        if (!mFirePressed && mGame != nullptr) {
             // Just pressed the fire button. See if we're in a menu and should
             // submit a special key.
-            if (textIsAt("YOU ARE", 0x0055) || textIsAt("OBSTACLE RUN", 0x0092)) {
-                // Main menu, press Clear to start game.
-                handleKeypress('\\', true);
-                handleKeypress('\\', false);
-                mFireSwallowed = true;
-            } else if (textIsAt("Enter number of players", 0x020F)) {
-                // Player menu, press "1" to start game.
-                handleKeypress('1', true);
-                handleKeypress('1', false);
-                mFireSwallowed = true;
-            } else if (textIsAt("G A M E   O V E R", 0x0157)) {
-                // Scarfman end of game, press Enter to restart.
-                handleKeypress('\n', true);
-                handleKeypress('\n', false);
-                mFireSwallowed = true;
-            } else {
-                // Anywhere else, make it a Space.
+            for (MenuKey const &menuKey : mGame->menuKeys) {
+                if (textIsAt(menuKey.text, menuKey.position)) {
+                    handleKeypress(menuKey.key, true);
+                    handleKeypress(menuKey.key, false);
+                    mFireSwallowed = true;
+                    break;
+                }
             }
         }
     } else {
@@ -318,7 +404,7 @@ int main() {
 #endif
 
     // Obstacle Run:
-    queueEvent(0.1, runCmdProgram, 1);
+    queueEvent(0.1, runCmdProgram, 2);
 
     trs80_main();
 }

@@ -1,6 +1,11 @@
 #!/bin/bash
 
-DEVICE=/dev/tty.usbmodem1301
+if [ $(ls -1 /dev/tty.usbmodem* | wc -l) != 1 ]; then
+    echo "Can't determine TTY."
+    exit 1
+fi
+
+DEVICE=$(echo /dev/tty.usbmodem*)
 
 # https://github.com/bradgrantham/simple-serial-terminal
 echo "Putting Pico in program mode..."
