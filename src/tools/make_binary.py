@@ -7,7 +7,7 @@
 #     make_binary.py BINARY_FILENAME
 #
 
-import sys
+import sys, os.path
 from itertools import batched
 
 def main():
@@ -15,11 +15,12 @@ def main():
         print("Usage: make_binary.py BINARY_FILENAME")
         exit(1)
 
-    filename = sys.argv[1]
+    pathname = sys.argv[1]
+    _, filename = os.path.split(pathname)
     identifier = filename.replace(".", "_").replace("-", "_").lower()
     constant = identifier.upper()
 
-    binary = open(filename, "rb").read()
+    binary = open(pathname, "rb").read()
     c_filename = identifier + ".c"
     h_filename = identifier + ".h"
 

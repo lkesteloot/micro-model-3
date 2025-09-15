@@ -10,6 +10,7 @@
 #include "main.h"
 #include "fonts.h"
 #include "obstacle_run_cmd.h"
+#include "scarfman2_cmd.h"
 #include "splash.h"
 
 #define TFT_SCLK        18
@@ -155,6 +156,11 @@ namespace {
                 size = OBSTACLE_RUN_CMD_SIZE;
                 binary = OBSTACLE_RUN_CMD;
                 break;
+
+            case 1:
+                size = SCARFMAN2_CMD_SIZE;
+                binary = SCARFMAN2_CMD;
+                break;
         }
 
         int i = 0;
@@ -273,6 +279,11 @@ void pollInput() {
                 handleKeypress('1', true);
                 handleKeypress('1', false);
                 mFireSwallowed = true;
+            } else if (textIsAt("G A M E   O V E R", 0x0157)) {
+                // Scarfman end of game, press Enter to restart.
+                handleKeypress('\n', true);
+                handleKeypress('\n', false);
+                mFireSwallowed = true;
             } else {
                 // Anywhere else, make it a Space.
             }
@@ -307,7 +318,7 @@ int main() {
 #endif
 
     // Obstacle Run:
-    queueEvent(0.1, runCmdProgram, 0);
+    queueEvent(0.1, runCmdProgram, 1);
 
     trs80_main();
 }

@@ -21,6 +21,7 @@ add_executable(micro-model-3
     src/z80emu/z80emu.c
     src/generated/model3_rom.c
     src/generated/obstacle_run_cmd.c
+    src/generated/scarfman2_cmd.c
     src/generated/splash.cpp
 )
 
