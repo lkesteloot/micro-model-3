@@ -509,8 +509,16 @@ void writeMemoryByte(uint16_t address, uint8_t value) {
     Trs80WriteByte(&gMachine, address, value);
 }
 
+uint8_t readMemoryByte(uint16_t address) {
+    return Trs80ReadByte(&gMachine, address);
+}
+
 void jumpToAddress(uint16_t pc) {
     gMachine.z80.pc = pc;
+}
+
+void setJoystick(uint8_t joystick) {
+    gMachine.joystick = joystick;
 }
 
 int trs80_main()
@@ -593,28 +601,7 @@ int trs80_main()
         }
 
         // Check user input.
-        /*
-        RoEvent ev;
-        int haveEvent = RoEventPoll(&ev);
-
-        if (haveEvent) {
-            switch(ev.eventType) {
-                case RoEvent::KEYBOARD_RAW: {
-                    const struct KeyboardRawEvent raw = ev.u.keyboardRaw;
-                    handleKeypress(raw.key, raw.isPress);
-                    break;
-                }
-                
-                default:
-                    // pass;
-                    break;
-            }
-        }
-        RoDoHousekeeping();
-        */
-
-        gMachine.joystick = readJoystick();
-        // printf("%x\n", gMachine.joystick);
+        pollInput();
 
         if (!gQueuedEvents.empty() && gQueuedEvents[0].clock < gMachine.clock) {
             QueuedEvent *e = &gQueuedEvents.front();

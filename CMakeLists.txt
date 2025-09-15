@@ -5,7 +5,7 @@ set(PICO_SDK_FETCH_FROM_GIT_TAG 2.2.0)
 set(PICO_BOARD pico)
 set(PICO_PLATFORM rp2040)
 
-include(pico_sdk_import.cmake)
+include(src/cmake/pico_sdk_import.cmake)
 
 project(micro-model-3 C CXX ASM)
 set(CMAKE_C_STANDARD 11)
