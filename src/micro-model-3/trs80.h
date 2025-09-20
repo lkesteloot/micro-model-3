@@ -10,7 +10,9 @@
 #define JOYSTICK_RIGHT_MASK (1 << 6)
 #define JOYSTICK_FIRE_MASK (1 << 7)
 
+void trs80_reset();
 int trs80_main();
+void trs80_exit();
 void queueEvent(float seconds, void (*callback)(int data), int data);
 void handleKeypress(int key, bool isPress);
 void writeMemoryByte(uint16_t address, uint8_t value);

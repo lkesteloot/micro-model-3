@@ -1,4 +1,5 @@
 
+import sys
 import json
 import base64
 import itertools
@@ -6,6 +7,9 @@ import itertools
 TO_EXPORT = [
         "Obstacle Run",
         "TRSDOS 1.3",
+        "Scarfman",
+        "Sea Dragon",
+        "Defense Command",
 ]
 
 # Always six chars.
@@ -22,8 +26,8 @@ def main():
         name = file["name"]
         if name in TO_EXPORT:
             screenshots = file["screenshots"]
-            if len(screenshots) > 0:
-                screenshot = screenshots[0]
+            for index, screenshot in enumerate(screenshots):
+                sys.stderr.write(name + " (" + str(index) + ")\n")
 
                 # Remove version number.
                 screenshot = screenshot[2:]
@@ -51,7 +55,7 @@ def main():
                         screen += [v]*count
 
                 print()
-                print("// " + name)
+                print("// " + name + " " + str(index))
                 print("uint8_t screen[] = {")
                 for line in itertools.batched(screen, 64):
                     for span in itertools.batched(line, 8):

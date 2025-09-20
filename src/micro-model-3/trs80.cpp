@@ -134,6 +134,9 @@ typedef struct Trs80Machine {
     bool nmiSeen;
     // Latch that mostly does nothing.
     uint8_t modeImage;
+
+    // Whether we should exit the loop.
+    bool exit;
 } Trs80Machine;
 
 static Trs80Machine gMachine;
@@ -521,10 +524,15 @@ void setJoystick(uint8_t joystick) {
     gMachine.joystick = joystick;
 }
 
-int trs80_main()
-{
-    bool quit = false;
+void trs80_reset() {
+    gMachine = {};
+}
 
+void trs80_exit() {
+    gMachine.exit = true;
+}
+
+int trs80_main() {
     // Read the ROM.
     if (MODEL3_ROM_SIZE != ROMSIZE) {
         printf("ROM is wrong size (%zd bytes)\n", MODEL3_ROM_SIZE);
@@ -539,7 +547,7 @@ int trs80_main()
 
     auto emulationStartTime = std::chrono::system_clock::now();
 
-    while (!quit) {
+    while (!gMachine.exit) {
         clk_t cyclesToDo = 10000;
 
         // See if we should interrupt the emulator early for our timer interrupt.

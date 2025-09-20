@@ -16,6 +16,7 @@
 #include "defense_command_cmd.h"
 #include "sea_dragon_cmd.h"
 #include "splash.h"
+#include "logos.h"
 
 #define TFT_SCLK        18
 #define TFT_MOSI        19
@@ -25,8 +26,13 @@
 
 #define TFT_ROTATION    1
 
+#define SCREEN_ADDRESS 15360
 #define SCREEN_WIDTH 64
 #define SCREEN_HEIGHT 16
+
+#define BLANK_CHARACTER 128
+
+#define LONG_HOLD_EXIT_GAME_MS 1000
 
 #define CMD_LOAD_BLOCK 0x01
 #define CMD_TRANSFER_ADDRESS 0x02
@@ -72,6 +78,8 @@ struct MenuKey {
 struct Game {
     size_t cmdSize;
     uint8_t *cmd;
+    uint8_t *logo;
+    int logoRows;
     std::vector<MenuKey> menuKeys;
 };
 
@@ -88,10 +96,14 @@ namespace {
     bool mFirePressed = false;
     bool mFireSwallowed = false;
 
+    const std::vector<uint8_t> BLANK_LINE(SCREEN_WIDTH, BLANK_CHARACTER);
+
     const std::vector<Game> gGameList = {
         {
             .cmdSize = OBSTACLE_RUN_CMD_SIZE,
             .cmd = OBSTACLE_RUN_CMD,
+            .logo = OBSTACLE_RUN_LOGO,
+            .logoRows = OBSTACLE_RUN_LOGO_ROWS,
             .menuKeys = {
                 {
                     // Main menu, press Clear to start game.
@@ -116,6 +128,8 @@ namespace {
         {
             .cmdSize = SCARFMAN2_CMD_SIZE,
             .cmd = SCARFMAN2_CMD,
+            .logo = SCARFMAN_LOGO,
+            .logoRows = SCARFMAN_LOGO_ROWS,
             .menuKeys = {
                 {
                     // Scarfman end of game, press Enter to restart.
@@ -128,6 +142,8 @@ namespace {
         {
             .cmdSize = DEFENSE_COMMAND_CMD_SIZE,
             .cmd = DEFENSE_COMMAND_CMD,
+            .logo = DEFENSE_COMMAND_LOGO,
+            .logoRows = DEFENSE_COMMAND_LOGO_ROWS,
             .menuKeys = {
                 {
                     // Splash screen, 1 player to begin.
@@ -140,6 +156,8 @@ namespace {
         {
             .cmdSize = SEA_DRAGON_CMD_SIZE,
             .cmd = SEA_DRAGON_CMD,
+            .logo = SEA_DRAGON_LOGO,
+            .logoRows = SEA_DRAGON_LOGO_ROWS,
             .menuKeys = {
                 {
                     // Splash screen, Enter to begin.
@@ -164,6 +182,7 @@ namespace {
     };
     // Current game.
     Game const *mGame = nullptr;
+    uint64_t mTimeAtFire = 0;
 
     void configureGpio() {
         gpio_init(LED_PIN);
@@ -212,10 +231,10 @@ namespace {
     }
 
     void showSplashScreen() {
-        int marginLines = SCREEN_HEIGHT - SPLASH_NUM_LINES;
+        int marginLines = SCREEN_HEIGHT - SPLASH_ROWS;
         int topMarginLines = marginLines / 2;
         int bottomMarginLines = marginLines - topMarginLines;
-        uint16_t addr = 15360;
+        uint16_t addr = SCREEN_ADDRESS;
 
         // Top margin.
         for (int line = 0; line < topMarginLines; line++) {
@@ -226,7 +245,7 @@ namespace {
 
         // Screen.
         uint8_t *s = SPLASH;
-        for (int line = 0; line < SPLASH_NUM_LINES; line++) {
+        for (int line = 0; line < SPLASH_ROWS; line++) {
             for (int x = 0; x < SCREEN_WIDTH; x++) {
                 writeMemoryByte(addr++, *s++);
             }
@@ -238,8 +257,6 @@ namespace {
                 writeMemoryByte(addr++, ' ');
             }
         }
-
-        sleep_ms(2000);
     }
 
     void keyCallback(int ch) {
@@ -247,14 +264,12 @@ namespace {
         handleKeypress(ch, false);
     }
 
-    void runCmdProgram(int program) {
-        showSplashScreen();
-
-        if (program < 0 || program >= gGameList.size()) {
-            program = 0;
+    void launchProgram(int gameIndex) {
+        if (gameIndex < 0 || gameIndex >= gGameList.size()) {
+            gameIndex = 0;
         }
 
-        mGame = &gGameList[program];
+        mGame = &gGameList[gameIndex];
 
         int size = mGame->cmdSize;
         uint8_t *binary = mGame->cmd;
@@ -325,7 +340,7 @@ namespace {
     bool textIsAt(char const *s, int position) {
         // printf("textIsAt()\n");
         while (*s != '\0') {
-            uint8_t mem = readMemoryByte(15360 + position);
+            uint8_t mem = readMemoryByte(SCREEN_ADDRESS + position);
             // printf("    position = %04x, s = %d, screen = %d\n", position, (int) *s, (int) mem);
             if (normalizeChar(mem) != normalizeChar(*s)) {
                 return false;
@@ -334,6 +349,139 @@ namespace {
             position += 1;
         }
         return true;
+    }
+
+    /**
+     * Add this many blank lines to the list of menu rows.
+     */
+    void addBlankLines(std::vector<const uint8_t *> &rows, int rowCount) {
+        while (rowCount--) {
+            rows.push_back(BLANK_LINE.data());
+        }
+    }
+
+    /**
+     * Add the logo to the list of menu rows.
+     */
+    void addLogo(std::vector<const uint8_t *> &rows, uint8_t *logo, int logoRows) {
+        while (logoRows--) {
+            rows.push_back(logo);
+            logo += SCREEN_WIDTH;
+        }
+    }
+
+    /**
+     * Draw the rows to the display, starting at the specified row.
+     */
+    void updateDisplay(std::vector<const uint8_t *> &rows, int startRow) {
+        uint16_t addr = SCREEN_ADDRESS;
+
+        for (int i = 0; i < SCREEN_HEIGHT; i++) {
+            const uint8_t *s = rows[startRow + i];
+            for (int x = 0; x < SCREEN_WIDTH; x++) {
+                writeMemoryByte(addr++, *s++);
+            }
+        }
+    }
+
+    /**
+     * Get the top (offset) row of the display, given that we want
+     * to center the given game's logo in the screen.
+     */
+    int targetRowOfGame(std::vector<int> gameRow, int gameIndex) {
+        Game const *game = &gGameList[gameIndex];
+        int row = gameRow[gameIndex];
+
+        int marginLines = SCREEN_HEIGHT - game->logoRows;
+        int topMarginLines = marginLines / 2;
+        int bottomMarginLines = marginLines - topMarginLines;
+
+        return row - topMarginLines;
+    }
+
+    bool get_pin(int pin) {
+        // Active low.
+        return !gpio_get(pin);
+    }
+
+    /**
+     * Show the menu and have the user choose the game.
+     *
+     * The parameter is the initial game to center on, or -1 to
+     * show the splash screen first.
+     */
+    int chooseGame(int gameIndex) {
+        // Make the menu.
+        std::vector<const uint8_t *> rows;
+        std::vector<int> gameRow;
+        int marginLines = SCREEN_HEIGHT - SPLASH_ROWS;
+        int topMarginLines = marginLines / 2;
+        int bottomMarginLines = marginLines - topMarginLines;
+
+        addBlankLines(rows, topMarginLines);
+        addLogo(rows, SPLASH, SPLASH_ROWS);
+        addBlankLines(rows, bottomMarginLines);
+
+        for (int i = 0; i < gGameList.size(); i++) {
+            Game const *game = &gGameList[i];
+
+            gameRow.push_back(rows.size());
+            addLogo(rows, game->logo, game->logoRows);
+            addBlankLines(rows, 4);
+        }
+
+        addBlankLines(rows, SCREEN_HEIGHT);
+
+        // Display the menu.
+        int scroll;
+        int targetScroll;
+
+        if (gameIndex == -1) {
+            scroll = 0;
+            updateDisplay(rows, scroll);
+            sleep_ms(2000);
+            gameIndex = 0;
+            targetScroll = targetRowOfGame(gameRow, gameIndex);
+        } else {
+            scroll = targetScroll = targetRowOfGame(gameRow, gameIndex);
+            updateDisplay(rows, scroll);
+        }
+
+        // Wait for fire to be released.
+        while (get_pin(JOYSTICK_FIRE_PIN)) {
+            // Nothing.
+        }
+
+        bool previousUp = false;
+        bool previousDown = false;
+        while (!get_pin(JOYSTICK_FIRE_PIN)) {
+            if (targetScroll < scroll) {
+                scroll -= 1;
+            } else if (targetScroll > scroll) {
+                scroll += 1;
+            }
+            updateDisplay(rows, scroll);
+
+            // Get user input.
+            bool up = get_pin(JOYSTICK_UP_PIN) || get_pin(JOYSTICK_LEFT_PIN);
+            bool down = get_pin(JOYSTICK_DOWN_PIN) || get_pin(JOYSTICK_RIGHT_PIN);
+
+            // Check for changes.
+            bool upPressed = up && !previousUp;
+            bool downPressed = down && !previousDown;
+
+            if (upPressed && gameIndex > 0) {
+                gameIndex -= 1;
+            } else if (downPressed && gameIndex < gGameList.size() - 1) {
+                gameIndex += 1;
+            }
+            targetScroll = targetRowOfGame(gameRow, gameIndex);
+
+            previousUp = up;
+            previousDown = down;
+        }
+
+        return gameIndex;
     }
 }
 
@@ -352,26 +500,44 @@ void writeScreenChar(int position, uint8_t ch) {
     writeScreenChar(x, y, ch);
 }
 
+void pollReset() {
+    mFirePressed = false;
+    mFireSwallowed = false;
+}
+
 void pollInput() {
     // Get GPIO state.
-    bool up = !gpio_get(JOYSTICK_UP_PIN);
-    bool down = !gpio_get(JOYSTICK_DOWN_PIN);
-    bool left = !gpio_get(JOYSTICK_LEFT_PIN);
-    bool right = !gpio_get(JOYSTICK_RIGHT_PIN);
-    bool fire = !gpio_get(JOYSTICK_FIRE_PIN);
+    bool up = get_pin(JOYSTICK_UP_PIN);
+    bool down = get_pin(JOYSTICK_DOWN_PIN);
+    bool left = get_pin(JOYSTICK_LEFT_PIN);
+    bool right = get_pin(JOYSTICK_RIGHT_PIN);
+    bool fire = get_pin(JOYSTICK_FIRE_PIN);
 
     // Simulate various keys.
     if (fire) {
-        if (!mFirePressed && mGame != nullptr) {
-            // Just pressed the fire button. See if we're in a menu and should
-            // submit a special key.
-            for (MenuKey const &menuKey : mGame->menuKeys) {
-                if (textIsAt(menuKey.text, menuKey.position)) {
-                    handleKeypress(menuKey.key, true);
-                    handleKeypress(menuKey.key, false);
-                    mFireSwallowed = true;
-                    break;
+        uint64_t now = to_ms_since_boot(get_absolute_time());
+
+        if (!mFirePressed) {
+            // Just pressed the fire button.
+            mTimeAtFire = now;
+
+            if (mGame != nullptr) {
+                // See if we're in a menu and should submit a special key.
+                for (MenuKey const &menuKey : mGame->menuKeys) {
+                    if (textIsAt(menuKey.text, menuKey.position)) {
+                        handleKeypress(menuKey.key, true);
+                        handleKeypress(menuKey.key, false);
+                        mFireSwallowed = true;
+                        break;
+                    }
                 }
+            }
+        } else {
+            // See how long we've been holding down the fire button.
+            uint64_t elapsedMs = now - mTimeAtFire;
+
+            if (elapsedMs >= LONG_HOLD_EXIT_GAME_MS) {
+                trs80_exit();
             }
         }
     } else {
@@ -403,8 +569,12 @@ int main() {
     queueEvent(3, keyCallback, '\n');
 #endif
 
-    // Obstacle Run:
-    queueEvent(0.1, runCmdProgram, 2);
-
-    trs80_main();
+    int gameIndex = -1;
+    while (true) {
+        gameIndex = chooseGame(gameIndex);
+        trs80_reset();
+        pollReset();
+        queueEvent(0.1, launchProgram, gameIndex);
+        trs80_main();
+    }
 }

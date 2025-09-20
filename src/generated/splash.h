@@ -3,5 +3,5 @@
 
 #include <stdint.h>
 
-#define SPLASH_NUM_LINES 9
+#define SPLASH_ROWS 9
 extern uint8_t SPLASH[];

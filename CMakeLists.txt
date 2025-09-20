@@ -25,6 +25,7 @@ add_executable(micro-model-3
     src/generated/defense_command_cmd.c
     src/generated/sea_dragon_cmd.c
     src/generated/splash.cpp
+    src/generated/logos.c
 )
 
 target_include_directories(micro-model-3
