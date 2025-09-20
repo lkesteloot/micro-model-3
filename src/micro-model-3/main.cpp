@@ -6,6 +6,7 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "pico/binary_info.h"
+#include "pico/rand.h"
 
 #include "ili9341.h"
 #include "trs80.h"
@@ -29,7 +30,9 @@
 
 #define BLANK_CHARACTER 128
 
-#define LONG_HOLD_EXIT_GAME_MS 1000
+constexpr uint64_t LONG_HOLD_EXIT_GAME_MS = 1000;
+constexpr uint64_t MENU_AUTO_RUN_MS = 1*60*1000;
+constexpr uint64_t IDLE_RETURN_TO_MENU_MS = 5*60*1000;
 
 // .CMD chunk types.
 #define CMD_LOAD_BLOCK 0x01
@@ -179,6 +182,7 @@ namespace {
     // Current game.
     Game const *mGame = nullptr;
     uint64_t mTimeAtFire = 0;
+    uint64_t mTimeAtInput = 0;
 
     void configureGpio() {
         gpio_init(LED_PIN);
@@ -452,6 +456,9 @@ namespace {
             updateDisplay(rows, scroll, gameRow[gameIndex] - 1, gGameList[gameIndex].logoRows + 2);
         }
 
+        // When the display was initially displayed.
+        uint64_t startTime = to_ms_since_boot(get_absolute_time());
+
         // Wait for fire to be released.
         while (getPin(JOYSTICK_FIRE_PIN)) {
             // Nothing.
@@ -481,6 +488,13 @@ namespace {
                 gameIndex += 1;
             }
             targetScroll = targetRowOfGame(gameRow, gameIndex);
+
+            // See if we've been idle for a while.
+            uint64_t now = to_ms_since_boot(get_absolute_time());
+            if (now - startTime >= MENU_AUTO_RUN_MS) {
+                // Play a random game.
+                return get_rand_32() % gGameList.size();
+            }
 
             previousUp = up;
             previousDown = down;
@@ -517,6 +531,8 @@ void pollReset() {
  * Poll the input and update the TRS-80 state based on it.
  */
 void pollInput() {
+    uint64_t now = to_ms_since_boot(get_absolute_time());
+
     // Get GPIO state.
     bool up = getPin(JOYSTICK_UP_PIN);
     bool down = getPin(JOYSTICK_DOWN_PIN);
@@ -524,10 +540,14 @@ void pollInput() {
     bool right = getPin(JOYSTICK_RIGHT_PIN);
     bool fire = getPin(JOYSTICK_FIRE_PIN);
 
+    if (up || down || left || right || fire) {
+        mTimeAtInput = now;
+    } else if (mTimeAtInput != 0 && now - mTimeAtInput >= IDLE_RETURN_TO_MENU_MS) {
+        trs80_exit();
+    }
+
     // Simulate various keys.
     if (fire) {
-        uint64_t now = to_ms_since_boot(get_absolute_time());
-
         if (!mFirePressed) {
             // Just pressed the fire button.
             mTimeAtFire = now;
@@ -585,6 +605,7 @@ int main() {
         gameIndex = chooseGame(gameIndex);
         trs80_reset();
         pollReset();
+        mTimeAtInput = to_ms_since_boot(get_absolute_time());
         queueEvent(0.1, launchProgram, gameIndex);
         trs80_main();
     }

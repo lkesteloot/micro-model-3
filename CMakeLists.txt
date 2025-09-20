@@ -43,4 +43,8 @@ pico_enable_stdio_uart(micro-model-3 0)
 # Generate various other output files, including the .uf2 file we need:
 pico_add_extra_outputs(micro-model-3)
 
-target_link_libraries(micro-model-3 pico_stdlib hardware_spi hardware_dma)
+target_link_libraries(micro-model-3
+    pico_stdlib
+    pico_rand
+    hardware_spi
+    hardware_dma)
