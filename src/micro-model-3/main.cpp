@@ -369,13 +369,19 @@ namespace {
     /**
      * Draw the rows to the display, starting at the specified row.
      */
-    void updateDisplay(std::vector<const uint8_t *> &rows, int startRow) {
+    void updateDisplay(std::vector<const uint8_t *> &rows, int startRow,
+            int highlightBegin, int highlightCount) {
+
         uint16_t addr = Trs80ScreenBegin;
 
         for (int i = 0; i < Trs80RowCount; i++) {
-            const uint8_t *s = rows[startRow + i];
+            int row = startRow + i;
+            uint8_t highlight = row >= highlightBegin && row < highlightBegin + highlightCount
+                ? 0x3F : 0x00;
+
+            const uint8_t *s = rows[row];
             for (int x = 0; x < Trs80ColumnCount; x++) {
-                writeMemoryByte(addr++, *s++);
+                writeMemoryByte(addr++, *s++ ^ highlight);
             }
         }
     }
@@ -437,13 +443,13 @@ namespace {
 
         if (gameIndex == -1) {
             scroll = 0;
-            updateDisplay(rows, scroll);
+            updateDisplay(rows, scroll, -1, 0);
             sleep_ms(2000);
             gameIndex = 0;
             targetScroll = targetRowOfGame(gameRow, gameIndex);
         } else {
             scroll = targetScroll = targetRowOfGame(gameRow, gameIndex);
-            updateDisplay(rows, scroll);
+            updateDisplay(rows, scroll, gameRow[gameIndex] - 1, gGameList[gameIndex].logoRows + 2);
         }
 
         // Wait for fire to be released.
@@ -459,7 +465,7 @@ namespace {
             } else if (targetScroll > scroll) {
                 scroll += 1;
             }
-            updateDisplay(rows, scroll);
+            updateDisplay(rows, scroll, gameRow[gameIndex] - 1, gGameList[gameIndex].logoRows + 2);
 
             // Get user input.
             bool up = getPin(JOYSTICK_UP_PIN) || getPin(JOYSTICK_LEFT_PIN);
