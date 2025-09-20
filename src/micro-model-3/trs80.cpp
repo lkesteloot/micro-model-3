@@ -21,14 +21,6 @@ typedef long long clk_t;
 constexpr clk_t Trs80ClockHz = 2027520;
 constexpr clk_t Trs80TimerHz = 30;
 
-constexpr int Trs80ColumnCount = 64;
-constexpr int Trs80RowCount = 16;
-constexpr int Trs80ScreenSize = Trs80ColumnCount*Trs80RowCount;
-constexpr int Trs80ScreenBegin = 15*1024;
-constexpr int Trs80ScreenEnd = Trs80ScreenBegin + Trs80ScreenSize;
-constexpr int Trs80CharWidth = 8;
-constexpr int Trs80CharHeight = 12;
-
 // Handle keyboard mapping. The TRS-80 Model III keyboard has keys in different
 // places, so we must occasionally fake a Shift key being up or down when it's
 // really not.

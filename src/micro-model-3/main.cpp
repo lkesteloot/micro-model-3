@@ -18,30 +18,29 @@
 #include "splash.h"
 #include "logos.h"
 
-#define TFT_SCLK        18
-#define TFT_MOSI        19
-#define TFT_DC          20
-#define TFT_RST         21
-#define TFT_CS          17
+// TFT pins.
+#define TFT_SCLK 18
+#define TFT_MOSI 19
+#define TFT_DC 20
+#define TFT_RST 21
+#define TFT_CS 17
 
 #define TFT_ROTATION    1
-
-#define SCREEN_ADDRESS 15360
-#define SCREEN_WIDTH 64
-#define SCREEN_HEIGHT 16
 
 #define BLANK_CHARACTER 128
 
 #define LONG_HOLD_EXIT_GAME_MS 1000
 
+// .CMD chunk types.
 #define CMD_LOAD_BLOCK 0x01
 #define CMD_TRANSFER_ADDRESS 0x02
 #define CMD_LOAD_MODULE_HEADER 0x05
 
-// Colors are in 565 (FFFF) format. To convert from RGB888 to RGB565, use:
+// Convert from RGB888 to RGB565:
 #define RGB888TO565(r, g, b) ((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
-#define BACKGROUND RGB888TO565(0x00, 0x00, 0x00)
-#define FOREGROUND RGB888TO565(0xFF, 0xFF, 0xFF)
+#define BLACK RGB888TO565(0x00, 0x00, 0x00)
+#define GRAY RGB888TO565(0x80, 0x80, 0x80)
+#define WHITE RGB888TO565(0xFF, 0xFF, 0xFF)
 
 // Centered:
 // #define LEFT_MARGIN 32
@@ -75,6 +74,9 @@ struct MenuKey {
     char key;
 };
 
+/**
+ * What we know about each game.
+ */
 struct Game {
     size_t cmdSize;
     uint8_t *cmd;
@@ -85,18 +87,12 @@ struct Game {
 
 namespace {
     uint16_t gFontGlyphs[FONT_CHAR_COUNT*FONT_CHAR_SIZE];
-
-    uint16_t COLORS[4] = {
-        RGB888TO565(0x00, 0x00, 0x00),
-        RGB888TO565(0x80, 0x80, 0x80),
-        RGB888TO565(0x80, 0x80, 0x80),
-        RGB888TO565(0xFF, 0xFF, 0xFF),
-    };
-
+    // Color to use for the four possible horizontal values of two pixels.
+    const uint16_t COLORS[4] = { BLACK, GRAY, GRAY, WHITE };
     bool mFirePressed = false;
     bool mFireSwallowed = false;
 
-    const std::vector<uint8_t> BLANK_LINE(SCREEN_WIDTH, BLANK_CHARACTER);
+    const std::vector<uint8_t> BLANK_LINE(Trs80ColumnCount, BLANK_CHARACTER);
 
     const std::vector<Game> gGameList = {
         {
@@ -213,7 +209,7 @@ namespace {
         LCD_setPins(TFT_DC, TFT_CS, TFT_RST, TFT_SCLK, TFT_MOSI);
         LCD_initDisplay();
         LCD_setRotation(TFT_ROTATION);
-        LCD_fillRect(0, 0, LCD_getWidth(), LCD_getHeight(), BACKGROUND);
+        LCD_fillRect(0, 0, LCD_getWidth(), LCD_getHeight(), BLACK);
     }
 
     void prepareFontBitmaps() {
@@ -231,14 +227,14 @@ namespace {
     }
 
     void showSplashScreen() {
-        int marginLines = SCREEN_HEIGHT - SPLASH_ROWS;
+        int marginLines = Trs80RowCount - SPLASH_ROWS;
         int topMarginLines = marginLines / 2;
         int bottomMarginLines = marginLines - topMarginLines;
-        uint16_t addr = SCREEN_ADDRESS;
+        uint16_t addr = Trs80ScreenBegin;
 
         // Top margin.
         for (int line = 0; line < topMarginLines; line++) {
-            for (int x = 0; x < SCREEN_WIDTH; x++) {
+            for (int x = 0; x < Trs80ColumnCount; x++) {
                 writeMemoryByte(addr++, ' ');
             }
         }
@@ -246,14 +242,14 @@ namespace {
         // Screen.
         uint8_t *s = SPLASH;
         for (int line = 0; line < SPLASH_ROWS; line++) {
-            for (int x = 0; x < SCREEN_WIDTH; x++) {
+            for (int x = 0; x < Trs80ColumnCount; x++) {
                 writeMemoryByte(addr++, *s++);
             }
         }
 
         // Bottom margin.
         for (int line = 0; line < bottomMarginLines; line++) {
-            for (int x = 0; x < SCREEN_WIDTH; x++) {
+            for (int x = 0; x < Trs80ColumnCount; x++) {
                 writeMemoryByte(addr++, ' ');
             }
         }
@@ -340,7 +336,7 @@ namespace {
     bool textIsAt(char const *s, int position) {
         // printf("textIsAt()\n");
         while (*s != '\0') {
-            uint8_t mem = readMemoryByte(SCREEN_ADDRESS + position);
+            uint8_t mem = readMemoryByte(Trs80ScreenBegin + position);
             // printf("    position = %04x, s = %d, screen = %d\n", position, (int) *s, (int) mem);
             if (normalizeChar(mem) != normalizeChar(*s)) {
                 return false;
@@ -366,7 +362,7 @@ namespace {
     void addLogo(std::vector<const uint8_t *> &rows, uint8_t *logo, int logoRows) {
         while (logoRows--) {
             rows.push_back(logo);
-            logo += SCREEN_WIDTH;
+            logo += Trs80ColumnCount;
         }
     }
 
@@ -374,11 +370,11 @@ namespace {
      * Draw the rows to the display, starting at the specified row.
      */
     void updateDisplay(std::vector<const uint8_t *> &rows, int startRow) {
-        uint16_t addr = SCREEN_ADDRESS;
+        uint16_t addr = Trs80ScreenBegin;
 
-        for (int i = 0; i < SCREEN_HEIGHT; i++) {
+        for (int i = 0; i < Trs80RowCount; i++) {
             const uint8_t *s = rows[startRow + i];
-            for (int x = 0; x < SCREEN_WIDTH; x++) {
+            for (int x = 0; x < Trs80ColumnCount; x++) {
                 writeMemoryByte(addr++, *s++);
             }
         }
@@ -392,14 +388,17 @@ namespace {
         Game const *game = &gGameList[gameIndex];
         int row = gameRow[gameIndex];
 
-        int marginLines = SCREEN_HEIGHT - game->logoRows;
+        int marginLines = Trs80RowCount - game->logoRows;
         int topMarginLines = marginLines / 2;
         int bottomMarginLines = marginLines - topMarginLines;
 
         return row - topMarginLines;
     }
 
-    bool get_pin(int pin) {
+    /**
+     * Get the value of the joystick pin (JOYSTICK_*_PIN).
+     */
+    bool getPin(int pin) {
         // Active low.
         return !gpio_get(pin);
     }
@@ -414,7 +413,7 @@ namespace {
         // Make the menu.
         std::vector<const uint8_t *> rows;
         std::vector<int> gameRow;
-        int marginLines = SCREEN_HEIGHT - SPLASH_ROWS;
+        int marginLines = Trs80RowCount - SPLASH_ROWS;
         int topMarginLines = marginLines / 2;
         int bottomMarginLines = marginLines - topMarginLines;
 
@@ -430,7 +429,7 @@ namespace {
             addBlankLines(rows, 4);
         }
 
-        addBlankLines(rows, SCREEN_HEIGHT);
+        addBlankLines(rows, Trs80RowCount);
 
         // Display the menu.
         int scroll;
@@ -448,13 +447,13 @@ namespace {
         }
 
         // Wait for fire to be released.
-        while (get_pin(JOYSTICK_FIRE_PIN)) {
+        while (getPin(JOYSTICK_FIRE_PIN)) {
             // Nothing.
         }
 
         bool previousUp = false;
         bool previousDown = false;
-        while (!get_pin(JOYSTICK_FIRE_PIN)) {
+        while (!getPin(JOYSTICK_FIRE_PIN)) {
             if (targetScroll < scroll) {
                 scroll -= 1;
             } else if (targetScroll > scroll) {
@@ -463,8 +462,8 @@ namespace {
             updateDisplay(rows, scroll);
 
             // Get user input.
-            bool up = get_pin(JOYSTICK_UP_PIN) || get_pin(JOYSTICK_LEFT_PIN);
-            bool down = get_pin(JOYSTICK_DOWN_PIN) || get_pin(JOYSTICK_RIGHT_PIN);
+            bool up = getPin(JOYSTICK_UP_PIN) || getPin(JOYSTICK_LEFT_PIN);
+            bool down = getPin(JOYSTICK_DOWN_PIN) || getPin(JOYSTICK_RIGHT_PIN);
 
             // Check for changes.
             bool upPressed = up && !previousUp;
@@ -495,23 +494,29 @@ void writeScreenChar(int x, int y, uint8_t ch) {
 }
 
 void writeScreenChar(int position, uint8_t ch) {
-    int x = position % SCREEN_WIDTH;
-    int y = position / SCREEN_WIDTH;
+    int x = position % Trs80ColumnCount;
+    int y = position / Trs80ColumnCount;
     writeScreenChar(x, y, ch);
 }
 
+/**
+ * Reset the polling system.
+ */
 void pollReset() {
     mFirePressed = false;
     mFireSwallowed = false;
 }
 
+/**
+ * Poll the input and update the TRS-80 state based on it.
+ */
 void pollInput() {
     // Get GPIO state.
-    bool up = get_pin(JOYSTICK_UP_PIN);
-    bool down = get_pin(JOYSTICK_DOWN_PIN);
-    bool left = get_pin(JOYSTICK_LEFT_PIN);
-    bool right = get_pin(JOYSTICK_RIGHT_PIN);
-    bool fire = get_pin(JOYSTICK_FIRE_PIN);
+    bool up = getPin(JOYSTICK_UP_PIN);
+    bool down = getPin(JOYSTICK_DOWN_PIN);
+    bool left = getPin(JOYSTICK_LEFT_PIN);
+    bool right = getPin(JOYSTICK_RIGHT_PIN);
+    bool fire = getPin(JOYSTICK_FIRE_PIN);
 
     // Simulate various keys.
     if (fire) {

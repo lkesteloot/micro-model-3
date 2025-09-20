@@ -10,6 +10,14 @@
 #define JOYSTICK_RIGHT_MASK (1 << 6)
 #define JOYSTICK_FIRE_MASK (1 << 7)
 
+constexpr int Trs80ColumnCount = 64;
+constexpr int Trs80RowCount = 16;
+constexpr int Trs80ScreenSize = Trs80ColumnCount*Trs80RowCount;
+constexpr int Trs80ScreenBegin = 15*1024;
+constexpr int Trs80ScreenEnd = Trs80ScreenBegin + Trs80ScreenSize;
+constexpr int Trs80CharWidth = 8;
+constexpr int Trs80CharHeight = 12;
+
 void trs80_reset();
 int trs80_main();
 void trs80_exit();
