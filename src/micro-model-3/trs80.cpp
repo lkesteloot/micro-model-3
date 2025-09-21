@@ -415,7 +415,10 @@ uint8_t Trs80ReadByte(Trs80Machine *machine, uint16_t address) {
 
 void Trs80WriteByte(Trs80Machine *machine, uint16_t address, uint8_t value) {
     if (address >= ROMSIZE) {
-        if (address >= Trs80ScreenBegin && address < Trs80ScreenEnd) {
+        if (address >= Trs80ScreenBegin &&
+                address < Trs80ScreenEnd &&
+                gMachine.memory[address] != value) {
+
             writeScreenChar(address - Trs80ScreenBegin, value);
         }
         gMachine.memory[address] = value;
