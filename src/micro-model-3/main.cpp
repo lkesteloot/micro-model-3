@@ -16,6 +16,9 @@
 #include "scarfman2_cmd.h"
 #include "defense_command_cmd.h"
 #include "sea_dragon_cmd.h"
+#include "breakdown_cmd.h"
+#include "ever_given_cmd.h"
+#include "galaxy_invasion_cmd.h"
 #include "splash.h"
 #include "logos.h"
 
@@ -31,7 +34,7 @@
 #define BLANK_CHARACTER 128
 
 constexpr uint64_t LONG_HOLD_EXIT_GAME_MS = 1000;
-constexpr uint64_t MENU_AUTO_RUN_MS = 1*60*1000;
+constexpr uint64_t IDLE_AUTO_PLAY_MS = 20*1000;
 constexpr uint64_t IDLE_RETURN_TO_MENU_MS = 5*60*1000;
 
 // .CMD chunk types.
@@ -85,6 +88,7 @@ struct Game {
     uint8_t *cmd;
     uint8_t *logo;
     int logoRows;
+    bool autoPlay;
     std::vector<MenuKey> menuKeys;
 };
 
@@ -103,6 +107,7 @@ namespace {
             .cmd = OBSTACLE_RUN_CMD,
             .logo = OBSTACLE_RUN_LOGO,
             .logoRows = OBSTACLE_RUN_LOGO_ROWS,
+            .autoPlay = true,
             .menuKeys = {
                 {
                     // Main menu, press Clear to start game.
@@ -129,6 +134,7 @@ namespace {
             .cmd = SCARFMAN2_CMD,
             .logo = SCARFMAN_LOGO,
             .logoRows = SCARFMAN_LOGO_ROWS,
+            .autoPlay = false,
             .menuKeys = {
                 {
                     // Scarfman end of game, press Enter to restart.
@@ -143,6 +149,7 @@ namespace {
             .cmd = DEFENSE_COMMAND_CMD,
             .logo = DEFENSE_COMMAND_LOGO,
             .logoRows = DEFENSE_COMMAND_LOGO_ROWS,
+            .autoPlay = true,
             .menuKeys = {
                 {
                     // Splash screen, 1 player to begin.
@@ -157,6 +164,7 @@ namespace {
             .cmd = SEA_DRAGON_CMD,
             .logo = SEA_DRAGON_LOGO,
             .logoRows = SEA_DRAGON_LOGO_ROWS,
+            .autoPlay = true,
             .menuKeys = {
                 {
                     // Splash screen, Enter to begin.
@@ -175,6 +183,57 @@ namespace {
                     .text = "Skill level",
                     .position = 0x0315,
                     .key = '0',
+                },
+            },
+        },
+        {
+            .cmdSize = BREAKDOWN_CMD_SIZE,
+            .cmd = BREAKDOWN_CMD,
+            .logo = BREAKDOWN_LOGO,
+            .logoRows = BREAKDOWN_LOGO_ROWS,
+            .autoPlay = true,
+            .menuKeys = {
+                // Nothing.
+            },
+        },
+        {
+            .cmdSize = EVER_GIVEN_CMD_SIZE,
+            .cmd = EVER_GIVEN_CMD,
+            .logo = EVER_GIVEN_LOGO,
+            .logoRows = EVER_GIVEN_LOGO_ROWS,
+            .autoPlay = false,
+            .menuKeys = {
+                {
+                    .text = "Press",
+                    .position = 0x03C0,
+                    .key = '\n',
+                },
+            },
+        },
+        {
+            .cmdSize = GALAXY_INVASION_CMD_SIZE,
+            .cmd = GALAXY_INVASION_CMD,
+            .logo = GALAXY_INVASION_LOGO,
+            .logoRows = GALAXY_INVASION_LOGO_ROWS,
+            .autoPlay = true,
+            .menuKeys = {
+                {
+                    // Splash screen, Clear to begin.
+                    .text = "Press",
+                    .position = 0x03C5,
+                    .key = '\\',
+                },
+                {
+                    // Player menu, press "1" to start game.
+                    .text = "Number of players",
+                    .position = 0x0200,
+                    .key = '1',
+                },
+                {
+                    // High score, just skip it.
+                    .text = "Congratulations",
+                    .position = 0x0117,
+                    .key = '\n',
                 },
             },
         },
@@ -270,6 +329,9 @@ namespace {
         }
 
         mGame = &gGameList[gameIndex];
+
+        // Turn off blinking cursor.
+        writeMemoryByte(16412, 1);
 
         int size = mGame->cmdSize;
         uint8_t *binary = mGame->cmd;
@@ -456,13 +518,13 @@ namespace {
             updateDisplay(rows, scroll, gameRow[gameIndex] - 1, gGameList[gameIndex].logoRows + 2);
         }
 
-        // When the display was initially displayed.
-        uint64_t startTime = to_ms_since_boot(get_absolute_time());
-
         // Wait for fire to be released.
         while (getPin(JOYSTICK_FIRE_PIN)) {
             // Nothing.
         }
+
+        // When the display was initially displayed.
+        uint64_t lastUserInteraction = to_ms_since_boot(get_absolute_time());
 
         bool previousUp = false;
         bool previousDown = false;
@@ -491,9 +553,15 @@ namespace {
 
             // See if we've been idle for a while.
             uint64_t now = to_ms_since_boot(get_absolute_time());
-            if (now - startTime >= MENU_AUTO_RUN_MS) {
+            if (upPressed || downPressed) {
+                lastUserInteraction = now;
+            }
+            if (now - lastUserInteraction >= IDLE_AUTO_PLAY_MS) {
                 // Play a random game.
-                return get_rand_32() % gGameList.size();
+                do {
+                    gameIndex = get_rand_32() % gGameList.size();
+                } while (!gGameList[gameIndex].autoPlay);
+                return gameIndex;
             }
 
             previousUp = up;
@@ -543,6 +611,7 @@ void pollInput() {
     if (up || down || left || right || fire) {
         mTimeAtInput = now;
     } else if (mTimeAtInput != 0 && now - mTimeAtInput >= IDLE_RETURN_TO_MENU_MS) {
+        // Idle too long, exit game.
         trs80_exit();
     }
 

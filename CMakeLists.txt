@@ -24,6 +24,9 @@ add_executable(micro-model-3
     src/generated/scarfman2_cmd.c
     src/generated/defense_command_cmd.c
     src/generated/sea_dragon_cmd.c
+    src/generated/breakdown_cmd.c
+    src/generated/ever_given_cmd.c
+    src/generated/galaxy_invasion_cmd.c
     src/generated/splash.cpp
     src/generated/logos.c
 )

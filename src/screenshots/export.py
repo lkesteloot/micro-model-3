@@ -10,6 +10,8 @@ TO_EXPORT = [
         "Scarfman",
         "Sea Dragon",
         "Defense Command",
+        "Galaxy Invasion",
+        "Breakdown",
 ]
 
 # Always six chars.
@@ -24,7 +26,7 @@ def main():
     files = data["files"]
     for file in files:
         name = file["name"]
-        if name in TO_EXPORT:
+        if (name in TO_EXPORT) or True:
             screenshots = file["screenshots"]
             for index, screenshot in enumerate(screenshots):
                 sys.stderr.write(name + " (" + str(index) + ")\n")
