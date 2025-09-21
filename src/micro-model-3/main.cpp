@@ -35,7 +35,8 @@
 
 constexpr uint64_t LONG_HOLD_EXIT_GAME_MS = 1000;
 constexpr uint64_t IDLE_AUTO_PLAY_MS = 20*1000;
-constexpr uint64_t IDLE_RETURN_TO_MENU_MS = 5*60*1000;
+constexpr uint64_t IDLE_DEMO_RETURN_TO_MENU_MS = 5*60*1000;
+constexpr uint64_t IDLE_NO_DEMO_RETURN_TO_MENU_MS = 30*1000;
 
 // .CMD chunk types.
 #define CMD_LOAD_BLOCK 0x01
@@ -88,7 +89,7 @@ struct Game {
     uint8_t *cmd;
     uint8_t *logo;
     int logoRows;
-    bool autoPlay;
+    bool hasDemo;
     std::vector<MenuKey> menuKeys;
 };
 
@@ -107,7 +108,7 @@ namespace {
             .cmd = OBSTACLE_RUN_CMD,
             .logo = OBSTACLE_RUN_LOGO,
             .logoRows = OBSTACLE_RUN_LOGO_ROWS,
-            .autoPlay = true,
+            .hasDemo = true,
             .menuKeys = {
                 {
                     // Main menu, press Clear to start game.
@@ -134,7 +135,7 @@ namespace {
             .cmd = SCARFMAN2_CMD,
             .logo = SCARFMAN_LOGO,
             .logoRows = SCARFMAN_LOGO_ROWS,
-            .autoPlay = false,
+            .hasDemo = false,
             .menuKeys = {
                 {
                     // Scarfman end of game, press Enter to restart.
@@ -149,7 +150,7 @@ namespace {
             .cmd = DEFENSE_COMMAND_CMD,
             .logo = DEFENSE_COMMAND_LOGO,
             .logoRows = DEFENSE_COMMAND_LOGO_ROWS,
-            .autoPlay = true,
+            .hasDemo = true,
             .menuKeys = {
                 {
                     // Splash screen, 1 player to begin.
@@ -164,7 +165,7 @@ namespace {
             .cmd = SEA_DRAGON_CMD,
             .logo = SEA_DRAGON_LOGO,
             .logoRows = SEA_DRAGON_LOGO_ROWS,
-            .autoPlay = true,
+            .hasDemo = true,
             .menuKeys = {
                 {
                     // Splash screen, Enter to begin.
@@ -191,7 +192,7 @@ namespace {
             .cmd = BREAKDOWN_CMD,
             .logo = BREAKDOWN_LOGO,
             .logoRows = BREAKDOWN_LOGO_ROWS,
-            .autoPlay = true,
+            .hasDemo = false,
             .menuKeys = {
                 // Nothing.
             },
@@ -201,7 +202,7 @@ namespace {
             .cmd = EVER_GIVEN_CMD,
             .logo = EVER_GIVEN_LOGO,
             .logoRows = EVER_GIVEN_LOGO_ROWS,
-            .autoPlay = false,
+            .hasDemo = false,
             .menuKeys = {
                 {
                     .text = "Press",
@@ -215,7 +216,7 @@ namespace {
             .cmd = GALAXY_INVASION_CMD,
             .logo = GALAXY_INVASION_LOGO,
             .logoRows = GALAXY_INVASION_LOGO_ROWS,
-            .autoPlay = true,
+            .hasDemo = true,
             .menuKeys = {
                 {
                     // Splash screen, Clear to begin.
@@ -560,7 +561,7 @@ namespace {
                 // Play a random game.
                 do {
                     gameIndex = get_rand_32() % gGameList.size();
-                } while (!gGameList[gameIndex].autoPlay);
+                } while (!gGameList[gameIndex].hasDemo);
                 return gameIndex;
             }
 
@@ -608,9 +609,13 @@ void pollInput() {
     bool right = getPin(JOYSTICK_RIGHT_PIN);
     bool fire = getPin(JOYSTICK_FIRE_PIN);
 
+    uint64_t idleReturnToMenuMs = mGame != nullptr && mGame->hasDemo
+        ? IDLE_DEMO_RETURN_TO_MENU_MS
+        : IDLE_NO_DEMO_RETURN_TO_MENU_MS;
+
     if (up || down || left || right || fire) {
         mTimeAtInput = now;
-    } else if (mTimeAtInput != 0 && now - mTimeAtInput >= IDLE_RETURN_TO_MENU_MS) {
+    } else if (mTimeAtInput != 0 && now - mTimeAtInput >= idleReturnToMenuMs) {
         // Idle too long, exit game.
         trs80_exit();
     }
