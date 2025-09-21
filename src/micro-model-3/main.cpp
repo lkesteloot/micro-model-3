@@ -104,6 +104,33 @@ namespace {
 
     const std::vector<Game> gGameList = {
         {
+            .cmdSize = GALAXY_INVASION_CMD_SIZE,
+            .cmd = GALAXY_INVASION_CMD,
+            .logo = GALAXY_INVASION_LOGO,
+            .logoRows = GALAXY_INVASION_LOGO_ROWS,
+            .hasDemo = true,
+            .menuKeys = {
+                {
+                    // Splash screen, Clear to begin.
+                    .text = "Press",
+                    .position = 0x03C5,
+                    .key = '\\',
+                },
+                {
+                    // Player menu, press "1" to start game.
+                    .text = "Number of players",
+                    .position = 0x0200,
+                    .key = '1',
+                },
+                {
+                    // High score, just skip it.
+                    .text = "Congratulations",
+                    .position = 0x0117,
+                    .key = '\n',
+                },
+            },
+        },
+        {
             .cmdSize = OBSTACLE_RUN_CMD_SIZE,
             .cmd = OBSTACLE_RUN_CMD,
             .logo = OBSTACLE_RUN_LOGO,
@@ -165,7 +192,7 @@ namespace {
             .cmd = SEA_DRAGON_CMD,
             .logo = SEA_DRAGON_LOGO,
             .logoRows = SEA_DRAGON_LOGO_ROWS,
-            .hasDemo = true,
+            .hasDemo = false,
             .menuKeys = {
                 {
                     // Splash screen, Enter to begin.
@@ -207,33 +234,6 @@ namespace {
                 {
                     .text = "Press",
                     .position = 0x03C0,
-                    .key = '\n',
-                },
-            },
-        },
-        {
-            .cmdSize = GALAXY_INVASION_CMD_SIZE,
-            .cmd = GALAXY_INVASION_CMD,
-            .logo = GALAXY_INVASION_LOGO,
-            .logoRows = GALAXY_INVASION_LOGO_ROWS,
-            .hasDemo = true,
-            .menuKeys = {
-                {
-                    // Splash screen, Clear to begin.
-                    .text = "Press",
-                    .position = 0x03C5,
-                    .key = '\\',
-                },
-                {
-                    // Player menu, press "1" to start game.
-                    .text = "Number of players",
-                    .position = 0x0200,
-                    .key = '1',
-                },
-                {
-                    // High score, just skip it.
-                    .text = "Congratulations",
-                    .position = 0x0117,
                     .key = '\n',
                 },
             },
@@ -499,7 +499,7 @@ namespace {
 
             gameRow.push_back(rows.size());
             addLogo(rows, game->logo, game->logoRows);
-            addBlankLines(rows, 4);
+            addBlankLines(rows, 2);
         }
 
         addBlankLines(rows, Trs80RowCount);
