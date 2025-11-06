@@ -47,9 +47,6 @@ target_compile_definitions(micro-model-3 PRIVATE
 # Serial output via USB:
 pico_enable_stdio_usb(micro-model-3 1)
 
-# Serial output via UART:
-pico_enable_stdio_uart(micro-model-3 0)
-
 # Generate various other output files, including the .uf2 file we need:
 pico_add_extra_outputs(micro-model-3)
 

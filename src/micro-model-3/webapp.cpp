@@ -12,17 +12,10 @@
 
 /*
 
-    To do:
-
-    Clean up this file.
     What could this do:
         Show the screen.
         Select game to play.
         Control the game, or at least type stuff in the menus.
-        Set the screen color.
-            Show HTML with choices, use SSI to set current choice.
-            POST to change color and return same HTML.
-        Mute audio.
 
  */
 
@@ -32,8 +25,6 @@
 #define SOUND_OFF 0
 #define SOUND_ON 1
 
-static absolute_time_t gWifiConnectedTime;
-static bool led_on = false;
 static int gColor = COLOR_WHITE;
 static int gSound = SOUND_OFF;
 
@@ -70,49 +61,24 @@ static void srv_txt(struct mdns_service *service, void *txt_userdata)
 #endif
 
 static const char *cgi_handler_test(int iIndex, int iNumParams, char *pcParam[], char *pcValue[]) {
-    if (iNumParams > 0) {
-        if (strcmp(pcParam[0], "test") == 0) {
-            return "/test.shtml";
-        }
-    }
     return "/index.shtml";
-    // return "/screen.shtml";
 }
 
 static tCGI cgi_handlers[] = {
     { "/", cgi_handler_test },
 };
 
-// Note that the buffer size is limited by LWIP_HTTPD_MAX_TAG_INSERT_LEN, so use LWIP_HTTPD_SSI_MULTIPART to return larger amounts of data
+// Note that the buffer size is limited by LWIP_HTTPD_MAX_TAG_INSERT_LEN, so
+// use LWIP_HTTPD_SSI_MULTIPART to return larger amounts of data
 u16_t ssi_example_ssi_handler(int iIndex, char *pcInsert, int iInsertLen
 #if LWIP_HTTPD_SSI_MULTIPART
     , uint16_t current_tag_part, uint16_t *next_tag_part
 #endif
 ) {
     size_t printed;
+
     switch (iIndex) {
-        case 0: { // "status"
-            printed = snprintf(pcInsert, iInsertLen, "Pass");
-            break;
-        }
-        case 1: { // "welcome"
-            printed = snprintf(pcInsert, iInsertLen, "Hello from Pico");
-            break;
-        }
-        case 2: { // "uptime"
-            uint64_t uptime_s = absolute_time_diff_us(gWifiConnectedTime, get_absolute_time()) / 1e6;
-            printed = snprintf(pcInsert, iInsertLen, "%" PRIu64, uptime_s);
-            break;
-        }
-        case 3: { // "ledstate"
-            printed = snprintf(pcInsert, iInsertLen, "%s", led_on ? "ON" : "OFF");
-            break;
-        }
-        case 4: { // "ledinv"
-            printed = snprintf(pcInsert, iInsertLen, "%s", led_on ? "OFF" : "ON");
-            break;
-        }
-        case 5: { // "screen"
+        case 0: { // "screen"
             uint16_t address = 15360 + current_tag_part;
             uint8_t byte = readMemoryByte(address);
             uint16_t ch = trs80ToBraille(byte);
@@ -123,84 +89,64 @@ u16_t ssi_example_ssi_handler(int iIndex, char *pcInsert, int iInsertLen
             }
             break;
         }
-        case 6: { // "clrw"
+        case 1: { // "clrw"
             printed = snprintf(pcInsert, iInsertLen,
                     gColor == COLOR_WHITE ? "checked" : "");
             break;
         }
-        case 7: { // "clrg"
+        case 2: { // "clrg"
             printed = snprintf(pcInsert, iInsertLen,
                     gColor == COLOR_GREEN ? "checked" : "");
             break;
         }
-        case 8: { // "clra"
+        case 3: { // "clra"
             printed = snprintf(pcInsert, iInsertLen,
                     gColor == COLOR_AMBER ? "checked" : "");
             break;
         }
-        case 9: { // "sndoff"
+        case 4: { // "sndoff"
             printed = snprintf(pcInsert, iInsertLen,
                     gSound == SOUND_OFF ? "checked" : "");
             break;
         }
-        case 10: { // "sndon"
+        case 5: { // "sndon"
             printed = snprintf(pcInsert, iInsertLen,
                     gSound == SOUND_ON ? "checked" : "");
             break;
         }
-#if LWIP_HTTPD_SSI_MULTIPART
-        case 11: { /* "table" */
-            printed = snprintf(pcInsert, iInsertLen, "<tr><td>This is table row number %d</td></tr>", current_tag_part + 1);
-            // Leave "next_tag_part" unchanged to indicate that all data has been returned for this tag
-            if (current_tag_part < 9) {
-                *next_tag_part = current_tag_part + 1;
-            }
-            break;
-        }
-#endif
         default: { // unknown tag
             printed = 0;
             break;
         }
     }
-  return (u16_t)printed;
+
+    return (u16_t) printed;
 }
 
 // Be aware of LWIP_HTTPD_MAX_TAG_NAME_LEN
 static const char *ssi_tags[] = {
-    "status",
-    "welcome",
-    "uptime",
-    "ledstate",
-    "ledinv",
     "screen",
     "clrw",
     "clrg",
     "clra",
     "sndoff",
     "sndon",
-    "table",
 };
 
 #if LWIP_HTTPD_SUPPORT_POST
-#define LED_STATE_BUFSIZE 10
 static void *current_connection;
 
 err_t httpd_post_begin(void *connection, const char *uri, const char *http_request,
         u16_t http_request_len, int content_len, char *response_uri,
         u16_t response_uri_len, u8_t *post_auto_wnd) {
-    if (memcmp(uri, "/led.cgi", 8) == 0 && current_connection != connection) {
-        current_connection = connection;
-        snprintf(response_uri, response_uri_len, "/ledfail.shtml");
-        *post_auto_wnd = 1;
-        return ERR_OK;
-    }
+
     if (memcmp(uri, "/", 1) == 0 && current_connection != connection) {
         current_connection = connection;
         snprintf(response_uri, response_uri_len, "/ledfail.shtml");
         *post_auto_wnd = 1;
         return ERR_OK;
     }
+
     return ERR_VAL;
 }
 
@@ -232,16 +178,9 @@ err_t httpd_post_receive_data(void *connection, struct pbuf *p) {
     err_t ret = ERR_VAL;
     LWIP_ASSERT("NULL pbuf", p != NULL);
     if (current_connection == connection) {
-        char buf[LED_STATE_BUFSIZE];
-        char *val = httpd_param_value(p, "led_state=", buf, sizeof(buf));
+        char buf[10];
+        char *val = httpd_param_value(p, "color=", buf, sizeof(buf));
         if (val) {
-            led_on = (strcmp(val, "ON") == 0) ? true : false;
-            cyw43_gpio_set(&cyw43_state, 0, led_on);
-            ret = ERR_OK;
-        }
-        val = httpd_param_value(p, "color=", buf, sizeof(buf));
-        if (val) {
-            printf("color=%s\n", val);
             if (strcmp(val, "white") == 0) {
                 gColor = COLOR_WHITE;
             } else if (strcmp(val, "green") == 0) {
@@ -253,7 +192,6 @@ err_t httpd_post_receive_data(void *connection, struct pbuf *p) {
         }
         val = httpd_param_value(p, "sound=", buf, sizeof(buf));
         if (val) {
-            printf("sound=%s\n", val);
             if (strcmp(val, "off") == 0) {
                 gSound = SOUND_OFF;
             } else if (strcmp(val, "on") == 0) {
@@ -267,9 +205,10 @@ err_t httpd_post_receive_data(void *connection, struct pbuf *p) {
 }
 
 void httpd_post_finished(void *connection, char *response_uri, u16_t response_uri_len) {
-    snprintf(response_uri, response_uri_len, "/ledfail.shtml");
     if (current_connection == connection) {
         snprintf(response_uri, response_uri_len, "/");
+    } else {
+        snprintf(response_uri, response_uri_len, "/ledfail.shtml");
     }
     current_connection = NULL;
 }
@@ -295,9 +234,6 @@ bool initWebapp() {
         printf("Connected.\n");
     }
     printf("Ready, running httpd at %s\n", ip4addr_ntoa(netif_ip4_addr(netif_list)));
-
-    // start http server
-    gWifiConnectedTime = get_absolute_time();
 
 #if LWIP_MDNS_RESPONDER
     // Setup mdns
