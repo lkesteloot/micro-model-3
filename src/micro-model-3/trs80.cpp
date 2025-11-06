@@ -521,6 +521,8 @@ void setJoystick(uint8_t joystick) {
 }
 
 void trs80Reset() {
+    // This hangs the machine on the W (but not the non-W). Might be some stack overflow.
+    // Might not be very necessary.
     // gMachine = {};
 }
 

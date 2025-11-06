@@ -672,16 +672,13 @@ int main() {
     stdio_init_all();
 
     sleep_ms(3000);
-    printf("main()\n");
+    printf("Micro Model III\n");
+    printf("---------------\n");
 
     configureGpio();
     prepareFontBitmaps();
     configureLcd();
     initWebapp();
-
-    while (false) {
-        trs80Idle();
-    }
 
 #if 0
     // Basic ROM:
@@ -700,6 +697,5 @@ int main() {
         mTimeAtInput = to_ms_since_boot(get_absolute_time());
         queueEvent(0.1, launchProgram, gameIndex);
         trs80Main();
-        printf("Game was exited...\n");
     }
 }

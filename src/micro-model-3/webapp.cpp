@@ -26,9 +26,21 @@
 
  */
 
+#define COLOR_WHITE 0
+#define COLOR_GREEN 1
+#define COLOR_AMBER 2
+#define SOUND_OFF 0
+#define SOUND_ON 1
+
 static absolute_time_t gWifiConnectedTime;
 static bool led_on = false;
+static int gColor = COLOR_WHITE;
+static int gSound = SOUND_OFF;
 
+/**
+ * Convert a TRS-80 graphics character between 128 and 191 inclusive to an
+ * equivalent Unicode braille character.
+ */
 static uint16_t trs80ToBraille(uint8_t ch) {
     // Remap to 0-63.
     ch -= 128;
@@ -57,37 +69,18 @@ static void srv_txt(struct mdns_service *service, void *txt_userdata)
 }
 #endif
 
-// Return some characters from the ascii representation of the mac address
-// e.g. 112233445566
-// chr_off is index of character in mac to start
-// chr_len is length of result
-// chr_off=8 and chr_len=4 would return "5566"
-// Return number of characters put into destination
-static size_t get_mac_ascii(int idx, size_t chr_off, size_t chr_len, char *dest_in) {
-    static const char hexchr[17] = "0123456789ABCDEF";
-    uint8_t mac[6];
-    char *dest = dest_in;
-    assert(chr_off + chr_len <= (2 * sizeof(mac)));
-    cyw43_hal_get_mac(idx, mac);
-    for (; chr_len && (chr_off >> 1) < sizeof(mac); ++chr_off, --chr_len) {
-        *dest++ = hexchr[mac[chr_off >> 1] >> (4 * (1 - (chr_off & 1))) & 0xf];
-    }
-    return dest - dest_in;
-}
-
 static const char *cgi_handler_test(int iIndex, int iNumParams, char *pcParam[], char *pcValue[]) {
     if (iNumParams > 0) {
         if (strcmp(pcParam[0], "test") == 0) {
             return "/test.shtml";
         }
     }
-    // return "/index.shtml";
-    return "/screen.shtml";
+    return "/index.shtml";
+    // return "/screen.shtml";
 }
 
 static tCGI cgi_handlers[] = {
     { "/", cgi_handler_test },
-    { "/index.shtml", cgi_handler_test },
 };
 
 // Note that the buffer size is limited by LWIP_HTTPD_MAX_TAG_INSERT_LEN, so use LWIP_HTTPD_SSI_MULTIPART to return larger amounts of data
@@ -130,8 +123,33 @@ u16_t ssi_example_ssi_handler(int iIndex, char *pcInsert, int iInsertLen
             }
             break;
         }
+        case 6: { // "clrw"
+            printed = snprintf(pcInsert, iInsertLen,
+                    gColor == COLOR_WHITE ? "checked" : "");
+            break;
+        }
+        case 7: { // "clrg"
+            printed = snprintf(pcInsert, iInsertLen,
+                    gColor == COLOR_GREEN ? "checked" : "");
+            break;
+        }
+        case 8: { // "clra"
+            printed = snprintf(pcInsert, iInsertLen,
+                    gColor == COLOR_AMBER ? "checked" : "");
+            break;
+        }
+        case 9: { // "sndoff"
+            printed = snprintf(pcInsert, iInsertLen,
+                    gSound == SOUND_OFF ? "checked" : "");
+            break;
+        }
+        case 10: { // "sndon"
+            printed = snprintf(pcInsert, iInsertLen,
+                    gSound == SOUND_ON ? "checked" : "");
+            break;
+        }
 #if LWIP_HTTPD_SSI_MULTIPART
-        case 6: { /* "table" */
+        case 11: { /* "table" */
             printed = snprintf(pcInsert, iInsertLen, "<tr><td>This is table row number %d</td></tr>", current_tag_part + 1);
             // Leave "next_tag_part" unchanged to indicate that all data has been returned for this tag
             if (current_tag_part < 9) {
@@ -156,17 +174,28 @@ static const char *ssi_tags[] = {
     "ledstate",
     "ledinv",
     "screen",
+    "clrw",
+    "clrg",
+    "clra",
+    "sndoff",
+    "sndon",
     "table",
 };
 
 #if LWIP_HTTPD_SUPPORT_POST
-#define LED_STATE_BUFSIZE 4
+#define LED_STATE_BUFSIZE 10
 static void *current_connection;
 
 err_t httpd_post_begin(void *connection, const char *uri, const char *http_request,
         u16_t http_request_len, int content_len, char *response_uri,
         u16_t response_uri_len, u8_t *post_auto_wnd) {
     if (memcmp(uri, "/led.cgi", 8) == 0 && current_connection != connection) {
+        current_connection = connection;
+        snprintf(response_uri, response_uri_len, "/ledfail.shtml");
+        *post_auto_wnd = 1;
+        return ERR_OK;
+    }
+    if (memcmp(uri, "/", 1) == 0 && current_connection != connection) {
         current_connection = connection;
         snprintf(response_uri, response_uri_len, "/ledfail.shtml");
         *post_auto_wnd = 1;
@@ -210,6 +239,28 @@ err_t httpd_post_receive_data(void *connection, struct pbuf *p) {
             cyw43_gpio_set(&cyw43_state, 0, led_on);
             ret = ERR_OK;
         }
+        val = httpd_param_value(p, "color=", buf, sizeof(buf));
+        if (val) {
+            printf("color=%s\n", val);
+            if (strcmp(val, "white") == 0) {
+                gColor = COLOR_WHITE;
+            } else if (strcmp(val, "green") == 0) {
+                gColor = COLOR_GREEN;
+            } else if (strcmp(val, "amber") == 0) {
+                gColor = COLOR_AMBER;
+            }
+            ret = ERR_OK;
+        }
+        val = httpd_param_value(p, "sound=", buf, sizeof(buf));
+        if (val) {
+            printf("sound=%s\n", val);
+            if (strcmp(val, "off") == 0) {
+                gSound = SOUND_OFF;
+            } else if (strcmp(val, "on") == 0) {
+                gSound = SOUND_ON;
+            }
+            ret = ERR_OK;
+        }
     }
     pbuf_free(p);
     return ret;
@@ -218,7 +269,7 @@ err_t httpd_post_receive_data(void *connection, struct pbuf *p) {
 void httpd_post_finished(void *connection, char *response_uri, u16_t response_uri_len) {
     snprintf(response_uri, response_uri_len, "/ledfail.shtml");
     if (current_connection == connection) {
-        snprintf(response_uri, response_uri_len, "/ledpass.shtml");
+        snprintf(response_uri, response_uri_len, "/");
     }
     current_connection = NULL;
 }
@@ -231,14 +282,7 @@ bool initWebapp() {
     }
     cyw43_arch_enable_sta_mode();
 
-#if 0
-    char hostname[sizeof(CYW43_HOST_NAME) + 4];
-    memcpy(&hostname[0], CYW43_HOST_NAME, sizeof(CYW43_HOST_NAME) - 1);
-    get_mac_ascii(CYW43_HAL_MAC_WLAN0, 8, 4, &hostname[sizeof(CYW43_HOST_NAME) - 1]);
-    hostname[sizeof(hostname) - 1] = '\0';
-#else
     const char *hostname = "model3";
-#endif
     netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], hostname);
 
     printf("Connecting to WiFi...\n");

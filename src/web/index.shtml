@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Micro Model III</title>
+        <style>
+            body {
+                padding: 2em;
+                background: white;
+                font-family: sans-serif;
+            }
+
+            form {
+                max-width: 30em;
+            }
+
+            fieldset {
+                margin-block: 1em;
+                background-color: #eee;
+                border-radius: 6px;
+            }
+
+            legend {
+                font-weight: bold;
+                font-size: 16pt;
+            }
+
+            .buttons {
+                padding-top: 1em;
+            }
+
+            button {
+                padding: 5px 15px;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>Micro Model III</h1>
+
+        <form method="POST">
+            <fieldset>
+                <legend>Color</legend>
+                <label><input type="radio" name="color" value="white" <!--#clrw-->> White</label>
+                <label><input type="radio" name="color" value="green" <!--#clrg-->> Green</label>
+                <label><input type="radio" name="color" value="amber" <!--#clra-->> Amber</label>
+            </fieldset>
+
+            <fieldset>
+                <legend>Sound</legend>
+                <label><input type="radio" name="sound" value="off" <!--#sndoff-->> Off</label>
+                <label><input type="radio" name="sound" value="on" <!--#sndon-->> On</label>
+            </fieldset>
+
+            <div class="buttons">
+                <button type="submit">SAVE</button>
+            </div>
+        </form>
+    </body>
+</html>
