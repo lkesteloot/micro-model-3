@@ -6,3 +6,4 @@
 void writeScreenChar(int x, int y, uint8_t ch);
 void writeScreenChar(int position, uint8_t ch);
 void pollInput();
+void trs80Idle();

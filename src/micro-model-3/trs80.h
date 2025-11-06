@@ -18,9 +18,9 @@ constexpr int Trs80ScreenEnd = Trs80ScreenBegin + Trs80ScreenSize;
 constexpr int Trs80CharWidth = 8;
 constexpr int Trs80CharHeight = 12;
 
-void trs80_reset();
-int trs80_main();
-void trs80_exit();
+void trs80Reset();
+int trs80Main();
+void trs80Exit();
 void queueEvent(float seconds, void (*callback)(int data), int data);
 void handleKeypress(int key, bool isPress);
 void writeMemoryByte(uint16_t address, uint8_t value);

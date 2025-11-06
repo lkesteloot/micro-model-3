@@ -21,6 +21,7 @@
 #include "galaxy_invasion_cmd.h"
 #include "splash.h"
 #include "logos.h"
+#include "webapp.h"
 
 // TFT pins.
 #define TFT_SCLK 18
@@ -33,10 +34,12 @@
 
 #define BLANK_CHARACTER 128
 
+#define ENABLE_LCD 0
+
 constexpr uint64_t LONG_HOLD_EXIT_GAME_MS = 1000;
-constexpr uint64_t IDLE_AUTO_PLAY_MS = 20*1000;
-constexpr uint64_t IDLE_DEMO_RETURN_TO_MENU_MS = 5*60*1000;
-constexpr uint64_t IDLE_NO_DEMO_RETURN_TO_MENU_MS = 30*1000;
+constexpr uint64_t IDLE_AUTO_PLAY_MS = 2*1000; // 20*1000;
+constexpr uint64_t IDLE_DEMO_RETURN_TO_MENU_MS = 5*1000; // 5*60*1000;
+constexpr uint64_t IDLE_NO_DEMO_RETURN_TO_MENU_MS = 5*1000; // 30*1000;
 
 // .CMD chunk types.
 #define CMD_LOAD_BLOCK 0x01
@@ -55,8 +58,6 @@ constexpr uint64_t IDLE_NO_DEMO_RETURN_TO_MENU_MS = 30*1000;
 // Screen in upper-left of display:
 #define LEFT_MARGIN 0
 #define TOP_MARGIN 0
-
-const uint LED_PIN = 25;
 
 #define JOYSTICK_UP_PIN 6
 #define JOYSTICK_DOWN_PIN 2
@@ -245,9 +246,6 @@ namespace {
     uint64_t mTimeAtInput = 0;
 
     void configureGpio() {
-        gpio_init(LED_PIN);
-        gpio_set_dir(LED_PIN, GPIO_OUT);
-
         gpio_init(JOYSTICK_UP_PIN);
         gpio_set_dir(JOYSTICK_UP_PIN, GPIO_IN);
         gpio_pull_up(JOYSTICK_UP_PIN);
@@ -270,10 +268,12 @@ namespace {
     }
 
     void configureLcd() {
+#if ENABLE_LCD
         LCD_setPins(TFT_DC, TFT_CS, TFT_RST, TFT_SCLK, TFT_MOSI);
         LCD_initDisplay();
         LCD_setRotation(TFT_ROTATION);
         LCD_fillRect(0, 0, LCD_getWidth(), LCD_getHeight(), BLACK);
+#endif
     }
 
     void prepareFontBitmaps() {
@@ -521,7 +521,7 @@ namespace {
 
         // Wait for fire to be released.
         while (getPin(JOYSTICK_FIRE_PIN)) {
-            // Nothing.
+            trs80Idle();
         }
 
         // When the display was initially displayed.
@@ -567,6 +567,8 @@ namespace {
 
             previousUp = up;
             previousDown = down;
+
+            trs80Idle();
         }
 
         return gameIndex;
@@ -574,12 +576,14 @@ namespace {
 }
 
 void writeScreenChar(int x, int y, uint8_t ch) {
+#if ENABLE_LCD
     LCD_writeBitmap(
             LEFT_MARGIN + x*FONT_WIDTH,
             TOP_MARGIN + y*FONT_HEIGHT,
             FONT_WIDTH,
             FONT_HEIGHT,
             &gFontGlyphs[ch*FONT_CHAR_SIZE]);
+#endif
 }
 
 void writeScreenChar(int position, uint8_t ch) {
@@ -617,7 +621,7 @@ void pollInput() {
         mTimeAtInput = now;
     } else if (mTimeAtInput != 0 && now - mTimeAtInput >= idleReturnToMenuMs) {
         // Idle too long, exit game.
-        trs80_exit();
+        trs80Exit();
     }
 
     // Simulate various keys.
@@ -642,7 +646,7 @@ void pollInput() {
             uint64_t elapsedMs = now - mTimeAtFire;
 
             if (elapsedMs >= LONG_HOLD_EXIT_GAME_MS) {
-                trs80_exit();
+                trs80Exit();
             }
         }
     } else {
@@ -660,12 +664,24 @@ void pollInput() {
     setJoystick(joystick);
 }
 
+void trs80Idle() {
+    pollWebapp();
+}
+
 int main() {
     stdio_init_all();
+
+    sleep_ms(3000);
+    printf("main()\n");
 
     configureGpio();
     prepareFontBitmaps();
     configureLcd();
+    initWebapp();
+
+    while (false) {
+        trs80Idle();
+    }
 
 #if 0
     // Basic ROM:
@@ -676,11 +692,14 @@ int main() {
 
     int gameIndex = -1;
     while (true) {
+        printf("Displaying menu...\n");
         gameIndex = chooseGame(gameIndex);
-        trs80_reset();
+        printf("Game %d was chosen...\n", gameIndex);
+        trs80Reset();
         pollReset();
         mTimeAtInput = to_ms_since_boot(get_absolute_time());
         queueEvent(0.1, launchProgram, gameIndex);
-        trs80_main();
+        trs80Main();
+        printf("Game was exited...\n");
     }
 }

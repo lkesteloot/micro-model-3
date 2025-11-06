@@ -501,6 +501,7 @@ void Trs80WritePort(Trs80Machine *machine, uint8_t address, uint8_t value) {
 void queueEvent(float seconds, void (*callback)(int data), int data) {
     clk_t clock = gMachine.clock + seconds*Trs80ClockHz;
     gQueuedEvents.emplace_back(clock, callback, data);
+    // TODO sort events by time.
 }
 
 void writeMemoryByte(uint16_t address, uint8_t value) {
@@ -519,15 +520,15 @@ void setJoystick(uint8_t joystick) {
     gMachine.joystick = joystick;
 }
 
-void trs80_reset() {
-    gMachine = {};
+void trs80Reset() {
+    // gMachine = {};
 }
 
-void trs80_exit() {
+void trs80Exit() {
     gMachine.exit = true;
 }
 
-int trs80_main() {
+int trs80Main() {
     // Read the ROM.
     if (MODEL3_ROM_SIZE != ROMSIZE) {
         printf("ROM is wrong size (%zd bytes)\n", MODEL3_ROM_SIZE);
@@ -543,17 +544,6 @@ int trs80_main() {
     auto emulationStartTime = std::chrono::system_clock::now();
 
     while (!gMachine.exit) {
-        clk_t cyclesToDo = 10000;
-
-        // See if we should interrupt the emulator early for our timer interrupt.
-        clk_t nextTimerClock = previousTimerClock + Trs80ClockHz / Trs80TimerHz;
-        if (nextTimerClock >= gMachine.clock) {
-            clk_t clocksUntilTimer = nextTimerClock - gMachine.clock;
-            if (cyclesToDo > clocksUntilTimer) {
-                cyclesToDo = clocksUntilTimer;
-            }
-        }
-
         // See if we should slow down if we're going too fast.
         auto now = std::chrono::system_clock::now();
         auto microsSinceStart = std::chrono::duration_cast<std::chrono::microseconds>(now - emulationStartTime);
@@ -563,7 +553,20 @@ int trs80_main() {
             printf("Skipping because %lld < %lld (%d left)\n",
                     expectedClock, gMachine.clock, gMachine.clock - expectedClock);
 #endif
+            trs80Idle();
             continue;
+        }
+
+        // How many cycles to run this time around.
+        clk_t cyclesToDo = 10000;
+
+        // See if we should interrupt the emulator early for our timer interrupt.
+        clk_t nextTimerClock = previousTimerClock + Trs80ClockHz / Trs80TimerHz;
+        if (nextTimerClock >= gMachine.clock) {
+            clk_t clocksUntilTimer = nextTimerClock - gMachine.clock;
+            if (cyclesToDo > clocksUntilTimer) {
+                cyclesToDo = clocksUntilTimer;
+            }
         }
 
         // Emulate!
