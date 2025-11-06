@@ -13,7 +13,6 @@
 /*
 
     What could this do:
-        Show the screen.
         Select game to play.
         Control the game, or at least type stuff in the menus.
 

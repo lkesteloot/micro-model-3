@@ -53,7 +53,6 @@ pico_add_extra_outputs(micro-model-3)
 pico_add_library(pico_httpd_content NOFLAG)
 pico_set_lwip_httpd_content(pico_httpd_content INTERFACE
     ${CMAKE_CURRENT_LIST_DIR}/src/web/404.html
-    ${CMAKE_CURRENT_LIST_DIR}/src/web/screen.shtml
     ${CMAKE_CURRENT_LIST_DIR}/src/web/index.shtml
     )
 

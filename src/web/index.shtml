@@ -32,6 +32,28 @@
                 padding: 5px 15px;
                 font-weight: bold;
             }
+
+            .screen {
+                background: black;
+                color: white;
+                padding: 1em;
+                line-height: 1.34ex;
+                letter-spacing: -0.2em;
+                font-size: 20pt;
+                width: min-content;
+            }
+
+            body:has([name="color"][value="white"][checked]) .screen {
+                color: #EEEEFF;
+            }
+
+            body:has([name="color"][value="green"][checked]) .screen {
+                color: #00BB00;
+            }
+
+            body:has([name="color"][value="amber"][checked]) .screen {
+                color: #FFBF00;
+            }
         </style>
     </head>
     <body>
@@ -55,5 +77,7 @@
                 <button type="submit">SAVE</button>
             </div>
         </form>
+
+        <pre class="screen"><!--#screen--></pre>
     </body>
 </html>
