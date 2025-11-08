@@ -138,6 +138,7 @@ static Trs80Machine gMachine;
 static void initializeKeyboardMap() {
     auto &m = gMachine.keyMap;
 
+    m.clear();
     m['0'] = { 4, 0, ST_NEUTRAL, 5, 1, ST_FORCE_DOWN };
     m['1'] = { 4, 1 };
     m['L'] = { 1, 4 };
@@ -403,6 +404,9 @@ static void resetMachine() {
     clearKeyboard();
     setTimerInterrupt(false);
     Z80Reset(&gMachine.z80);
+    gMachine.exit = false;
+    gMachine.keyQueue.clear();
+    gMachine.joystick = 0;
 }
 
 uint8_t Trs80ReadByte(Trs80Machine *machine, uint16_t address) {
@@ -521,9 +525,8 @@ void setJoystick(uint8_t joystick) {
 }
 
 void trs80Reset() {
-    // This hangs the machine on the W (but not the non-W). Might be some stack overflow.
-    // Might not be very necessary.
-    // gMachine = {};
+    resetMachine();
+    gQueuedEvents.clear();
 }
 
 void trs80Exit() {

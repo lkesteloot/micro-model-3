@@ -224,11 +224,25 @@ bool initWebapp() {
     netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], hostname);
 
     printf("Connecting to WiFi...\n");
-    if (cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASSWORD,
-                CYW43_AUTH_WPA2_AES_PSK, 30000)) {
-
-        printf("Failed to connect.\n");
-        exit(1);
+    int err = cyw43_arch_wifi_connect_timeout_ms(WIFI_SSID, WIFI_PASSWORD,
+            CYW43_AUTH_WPA2_AES_PSK, 30000);
+    if (err != 0) {
+        printf("Failed to connect to Wi-Fi.\n");
+        switch (err) {
+            case PICO_ERROR_TIMEOUT:
+                printf("Connection timeout.\n");
+                break;
+            case PICO_ERROR_BADAUTH:
+                printf("Invalid Wi-Fi password.\n");
+                break;
+            case PICO_ERROR_CONNECT_FAILED:
+                printf("Unknown reason.\n");
+                break;
+            default:
+                printf("Unexpected reason (%d).\n", err);
+                break;
+        }
+        return false;
     } else {
         printf("Connected.\n");
     }

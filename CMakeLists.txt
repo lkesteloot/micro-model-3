@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.13)
 
 set(PICO_SDK_FETCH_FROM_GIT ON)
 set(PICO_SDK_FETCH_FROM_GIT_TAG 2.2.0)
-set(PICO_BOARD pico_w)
+set(PICO_BOARD pico2_w)
 
 include(src/cmake/pico_sdk_import.cmake)
 

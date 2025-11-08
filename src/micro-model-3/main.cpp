@@ -678,7 +678,10 @@ int main() {
     configureGpio();
     prepareFontBitmaps();
     configureLcd();
-    initWebapp();
+    bool success = initWebapp();
+    if (!success) {
+        while (true) {}
+    }
 
 #if 0
     // Basic ROM:
