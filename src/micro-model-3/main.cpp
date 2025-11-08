@@ -35,9 +35,10 @@
 #define BLANK_CHARACTER 128
 
 #define ENABLE_LCD 0
+#define SKIP_CASS 0
 
 constexpr uint64_t LONG_HOLD_EXIT_GAME_MS = 1000;
-constexpr uint64_t IDLE_AUTO_PLAY_MS = 2*1000; // 20*1000;
+constexpr uint64_t IDLE_AUTO_PLAY_MS = 100; // 20*1000;
 constexpr uint64_t IDLE_DEMO_RETURN_TO_MENU_MS = 5*1000; // 5*60*1000;
 constexpr uint64_t IDLE_NO_DEMO_RETURN_TO_MENU_MS = 5*1000; // 30*1000;
 
@@ -290,6 +291,7 @@ namespace {
         }
     }
 
+#if 0
     void showSplashScreen() {
         int marginLines = Trs80RowCount - SPLASH_ROWS;
         int topMarginLines = marginLines / 2;
@@ -318,14 +320,17 @@ namespace {
             }
         }
     }
+#endif
 
+#if SKIP_CASS
     void keyCallback(int ch) {
         handleKeypress(ch, true);
         handleKeypress(ch, false);
     }
+#endif
 
     void launchProgram(int gameIndex) {
-        if (gameIndex < 0 || gameIndex >= gGameList.size()) {
+        if (gameIndex < 0 || gameIndex >= static_cast<int>(gGameList.size())) {
             gameIndex = 0;
         }
 
@@ -463,7 +468,7 @@ namespace {
 
         int marginLines = Trs80RowCount - game->logoRows;
         int topMarginLines = marginLines / 2;
-        int bottomMarginLines = marginLines - topMarginLines;
+        // int bottomMarginLines = marginLines - topMarginLines;
 
         return row - topMarginLines;
     }
@@ -494,7 +499,7 @@ namespace {
         addLogo(rows, SPLASH, SPLASH_ROWS);
         addBlankLines(rows, bottomMarginLines);
 
-        for (int i = 0; i < gGameList.size(); i++) {
+        for (unsigned i = 0; i < gGameList.size(); i++) {
             Game const *game = &gGameList[i];
 
             gameRow.push_back(rows.size());
@@ -547,7 +552,7 @@ namespace {
 
             if (upPressed && gameIndex > 0) {
                 gameIndex -= 1;
-            } else if (downPressed && gameIndex < gGameList.size() - 1) {
+            } else if (downPressed && gameIndex < static_cast<int>(gGameList.size()) - 1) {
                 gameIndex += 1;
             }
             targetScroll = targetRowOfGame(gameRow, gameIndex);
@@ -561,7 +566,7 @@ namespace {
                 // Play a random game.
                 do {
                     gameIndex = get_rand_32() % gGameList.size();
-                } while (!gGameList[gameIndex].hasDemo);
+                } while (!gGameList[gameIndex].hasDemo && false);
                 return gameIndex;
             }
 
@@ -575,16 +580,20 @@ namespace {
     }
 }
 
-void writeScreenChar(int x, int y, uint8_t ch) {
 #if ENABLE_LCD
+void writeScreenChar(int x, int y, uint8_t ch) {
     LCD_writeBitmap(
             LEFT_MARGIN + x*FONT_WIDTH,
             TOP_MARGIN + y*FONT_HEIGHT,
             FONT_WIDTH,
             FONT_HEIGHT,
             &gFontGlyphs[ch*FONT_CHAR_SIZE]);
-#endif
 }
+#else
+void writeScreenChar(int, int, uint8_t) {
+    // Nothing.
+}
+#endif
 
 void writeScreenChar(int position, uint8_t ch) {
     int x = position % Trs80ColumnCount;
@@ -683,7 +692,7 @@ int main() {
         while (true) {}
     }
 
-#if 0
+#if SKIP_CASS
     // Basic ROM:
     queueEvent(1, keyCallback, 'L');
     queueEvent(2, keyCallback, '0');

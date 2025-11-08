@@ -8,8 +8,8 @@ include(src/cmake/pico_sdk_import.cmake)
 
 project(micro-model-3 C CXX ASM)
 set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-psabi")
+set(CMAKE_CXX_STANDARD 20)
+
 pico_sdk_init()
 
 add_executable(micro-model-3
@@ -30,6 +30,11 @@ add_executable(micro-model-3
     src/generated/splash.cpp
     src/generated/logos.c
 )
+
+target_compile_options(micro-model-3 PRIVATE -Wno-psabi
+    # Warnings for my files only (SDK files are C and generate warnings):
+    $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -pedantic>
+    )
 
 target_include_directories(micro-model-3
     PRIVATE

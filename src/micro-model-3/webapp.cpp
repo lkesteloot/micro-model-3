@@ -29,11 +29,12 @@ static int gSound = SOUND_OFF;
 
 /**
  * Convert a TRS-80 graphics character between 128 and 191 inclusive to an
- * equivalent Unicode braille character.
+ * equivalent UCS-2 Unicode braille character.
  */
 static uint16_t trs80ToBraille(uint8_t ch) {
-    // Remap to 0-63.
-    ch -= 128;
+    if (ch == 0 || ch == 32) {
+        ch = 128;
+    }
 
     // Remap bits.
     uint8_t ul = (ch >> 0) & 0x01;
@@ -59,7 +60,11 @@ static void srv_txt(struct mdns_service *service, void *txt_userdata)
 }
 #endif
 
-static const char *cgi_handler_test(int iIndex, int iNumParams, char *pcParam[], char *pcValue[]) {
+static const char *cgi_handler_test(int iIndex __attribute__((unused)),
+        int iNumParams __attribute__((unused)),
+        char *pcParam[] __attribute__((unused)),
+        char *pcValue[] __attribute__((unused))) {
+
     return "/index.shtml";
 }
 
@@ -135,9 +140,11 @@ static const char *ssi_tags[] = {
 #if LWIP_HTTPD_SUPPORT_POST
 static void *current_connection;
 
-err_t httpd_post_begin(void *connection, const char *uri, const char *http_request,
-        u16_t http_request_len, int content_len, char *response_uri,
-        u16_t response_uri_len, u8_t *post_auto_wnd) {
+err_t httpd_post_begin(void *connection, const char *uri,
+        const char *http_request __attribute__((unused)),
+        u16_t http_request_len __attribute__((unused)),
+        int content_len __attribute__((unused)),
+        char *response_uri, u16_t response_uri_len, u8_t *post_auto_wnd) {
 
     if (memcmp(uri, "/", 1) == 0 && current_connection != connection) {
         current_connection = connection;

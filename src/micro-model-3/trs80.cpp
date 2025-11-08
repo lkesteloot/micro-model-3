@@ -409,7 +409,7 @@ static void resetMachine() {
     gMachine.joystick = 0;
 }
 
-uint8_t Trs80ReadByte(Trs80Machine *machine, uint16_t address) {
+uint8_t Trs80ReadByte(Trs80Machine *machine __attribute__((unused)), uint16_t address) {
     if (address >= Trs80KeyboardBegin && address < Trs80KeyboardEnd) {
         return readKeyboard(address);
     }
@@ -417,7 +417,7 @@ uint8_t Trs80ReadByte(Trs80Machine *machine, uint16_t address) {
     return gMachine.memory[address];
 }
 
-void Trs80WriteByte(Trs80Machine *machine, uint16_t address, uint8_t value) {
+void Trs80WriteByte(Trs80Machine *machine __attribute__((unused)), uint16_t address, uint8_t value) {
     if (address >= ROMSIZE) {
         if (address >= Trs80ScreenBegin &&
                 address < Trs80ScreenEnd &&
@@ -429,7 +429,7 @@ void Trs80WriteByte(Trs80Machine *machine, uint16_t address, uint8_t value) {
     }
 }
 
-uint8_t Trs80ReadPort(Trs80Machine *machine, uint8_t address) {
+uint8_t Trs80ReadPort(Trs80Machine *machine __attribute__((unused)), uint8_t address) {
     uint8_t value = 0xFF;
 
     switch (address) {
@@ -470,7 +470,7 @@ uint8_t Trs80ReadPort(Trs80Machine *machine, uint8_t address) {
     return value;
 }
 
-void Trs80WritePort(Trs80Machine *machine, uint8_t address, uint8_t value) {
+void Trs80WritePort(Trs80Machine *machine __attribute__((unused)), uint8_t address, uint8_t value) {
 #if 0
     printf("Write port 0x%02X value 0x%02X\n", address, value);
 #endif
