@@ -15,6 +15,7 @@
     What could this do:
         Select game to play.
         Control the game, or at least type stuff in the menus.
+        Control brightness of display (via backlight).
 
  */
 

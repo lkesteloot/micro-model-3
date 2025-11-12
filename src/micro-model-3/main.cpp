@@ -30,7 +30,7 @@
 #define TFT_RST 21
 #define TFT_CS 17
 
-#define TFT_ROTATION    1
+#define TFT_ROTATION    LCD_ROTATION_90
 
 #define BLANK_CHARACTER 128
 
@@ -46,12 +46,6 @@ constexpr uint64_t IDLE_NO_DEMO_RETURN_TO_MENU_MS = 5*1000; // 30*1000;
 #define CMD_LOAD_BLOCK 0x01
 #define CMD_TRANSFER_ADDRESS 0x02
 #define CMD_LOAD_MODULE_HEADER 0x05
-
-// Convert from RGB888 to RGB565:
-#define RGB888TO565(r, g, b) ((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
-#define BLACK RGB888TO565(0x00, 0x00, 0x00)
-#define GRAY RGB888TO565(0x80, 0x80, 0x80)
-#define WHITE RGB888TO565(0xFF, 0xFF, 0xFF)
 
 // Centered:
 // #define LEFT_MARGIN 32
@@ -98,7 +92,12 @@ struct Game {
 namespace {
     uint16_t gFontGlyphs[FONT_CHAR_COUNT*FONT_CHAR_SIZE];
     // Color to use for the four possible horizontal values of two pixels.
-    const uint16_t COLORS[4] = { BLACK, GRAY, GRAY, WHITE };
+    const uint16_t COLORS[4] = {
+        LCD_BLACK,
+        LCD_GRAY_128, // TODO try 186 for gamma-correction.
+        LCD_GRAY_128,
+        LCD_WHITE
+    };
     bool mFirePressed = false;
     bool mFireSwallowed = false;
 
@@ -273,7 +272,7 @@ namespace {
         LCD_setPins(TFT_DC, TFT_CS, TFT_RST, TFT_SCLK, TFT_MOSI);
         LCD_initDisplay();
         LCD_setRotation(TFT_ROTATION);
-        LCD_fillRect(0, 0, LCD_getWidth(), LCD_getHeight(), BLACK);
+        LCD_fillRect(0, 0, LCD_getWidth(), LCD_getHeight(), LCD_BLACK);
 #endif
     }
 
