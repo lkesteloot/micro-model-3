@@ -9,6 +9,7 @@
 
 #include "webapp.h"
 #include "trs80.h"
+#include "settings.h"
 
 /*
 
@@ -18,15 +19,6 @@
         Control brightness of display (via backlight).
 
  */
-
-#define COLOR_WHITE 0
-#define COLOR_GREEN 1
-#define COLOR_AMBER 2
-#define SOUND_OFF 0
-#define SOUND_ON 1
-
-static int gColor = COLOR_WHITE;
-static int gSound = SOUND_OFF;
 
 /**
  * Convert a TRS-80 graphics character between 128 and 191 inclusive to an
@@ -96,27 +88,27 @@ u16_t ssi_example_ssi_handler(int iIndex, char *pcInsert, int iInsertLen
         }
         case 1: { // "clrw"
             printed = snprintf(pcInsert, iInsertLen,
-                    gColor == COLOR_WHITE ? "checked" : "");
+                    getSettingsColor() == COLOR_WHITE ? "checked" : "");
             break;
         }
         case 2: { // "clrg"
             printed = snprintf(pcInsert, iInsertLen,
-                    gColor == COLOR_GREEN ? "checked" : "");
+                    getSettingsColor() == COLOR_GREEN ? "checked" : "");
             break;
         }
         case 3: { // "clra"
             printed = snprintf(pcInsert, iInsertLen,
-                    gColor == COLOR_AMBER ? "checked" : "");
+                    getSettingsColor() == COLOR_AMBER ? "checked" : "");
             break;
         }
         case 4: { // "sndoff"
             printed = snprintf(pcInsert, iInsertLen,
-                    gSound == SOUND_OFF ? "checked" : "");
+                    getSettingsSound() == SOUND_OFF ? "checked" : "");
             break;
         }
         case 5: { // "sndon"
             printed = snprintf(pcInsert, iInsertLen,
-                    gSound == SOUND_ON ? "checked" : "");
+                    getSettingsSound() == SOUND_ON ? "checked" : "");
             break;
         }
         default: { // unknown tag
@@ -158,7 +150,7 @@ err_t httpd_post_begin(void *connection, const char *uri,
 }
 
 // Return a value for a parameter
-char *httpd_param_value(struct pbuf *p, const char *param_name, char *value_buf, size_t value_buf_len) {
+static char *httpd_param_value(struct pbuf *p, const char *param_name, char *value_buf, size_t value_buf_len) {
     size_t param_len = strlen(param_name);
     u16_t param_pos = pbuf_memfind(p, param_name, param_len, 0);
     if (param_pos != 0xFFFF) {
@@ -189,20 +181,20 @@ err_t httpd_post_receive_data(void *connection, struct pbuf *p) {
         char *val = httpd_param_value(p, "color=", buf, sizeof(buf));
         if (val) {
             if (strcmp(val, "white") == 0) {
-                gColor = COLOR_WHITE;
+                setSettingsColor(COLOR_WHITE);
             } else if (strcmp(val, "green") == 0) {
-                gColor = COLOR_GREEN;
+                setSettingsColor(COLOR_GREEN);
             } else if (strcmp(val, "amber") == 0) {
-                gColor = COLOR_AMBER;
+                setSettingsColor(COLOR_AMBER);
             }
             ret = ERR_OK;
         }
         val = httpd_param_value(p, "sound=", buf, sizeof(buf));
         if (val) {
             if (strcmp(val, "off") == 0) {
-                gSound = SOUND_OFF;
+                setSettingsSound(SOUND_OFF);
             } else if (strcmp(val, "on") == 0) {
-                gSound = SOUND_ON;
+                setSettingsSound(SOUND_ON);
             }
             ret = ERR_OK;
         }

@@ -18,6 +18,7 @@ add_executable(micro-model-3
     src/micro-model-3/ili9341.c
     src/micro-model-3/fonts.cpp
     src/micro-model-3/webapp.cpp
+    src/micro-model-3/settings.cpp
     src/z80emu/z80emu.c
     src/generated/model3_rom.c
     src/generated/obstacle_run_cmd.c

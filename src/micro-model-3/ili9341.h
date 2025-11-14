@@ -7,6 +7,9 @@
 
 // Convert from RGB888 to RGB565:
 #define RGB888TO565(r, g, b) ((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
+#define RGB565TORED(c) (((c) >> 8) & 0xF8)
+#define RGB565TOGREEN(c) (((c) >> 3) & 0xFC)
+#define RGB565TOBLUE(c) (((c) << 3) & 0xFF)
 
 // Some ready-made 16-bit (565) color settings:
 #define LCD_BLACK 0x0000

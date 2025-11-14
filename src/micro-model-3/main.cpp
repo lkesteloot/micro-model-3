@@ -22,6 +22,7 @@
 #include "splash.h"
 #include "logos.h"
 #include "webapp.h"
+#include "settings.h"
 
 // TFT pins.
 #define TFT_SCLK 18
@@ -92,14 +93,10 @@ struct Game {
 namespace {
     uint16_t gFontGlyphs[FONT_CHAR_COUNT*FONT_CHAR_SIZE];
     // Color to use for the four possible horizontal values of two pixels.
-    const uint16_t COLORS[4] = {
-        LCD_BLACK,
-        LCD_GRAY_128, // TODO try 186 for gamma-correction.
-        LCD_GRAY_128,
-        LCD_WHITE
-    };
+    uint16_t gColor[4];
     bool mFirePressed = false;
     bool mFireSwallowed = false;
+    uint64_t gSound;
 
     const std::vector<uint8_t> BLANK_LINE(Trs80ColumnCount, BLANK_CHARACTER);
 
@@ -284,7 +281,7 @@ namespace {
                 uint8_t b = Trs80FontBits[ch*FONT_HEIGHT + y];
                 for (int x = 0; x < FONT_WIDTH; x++) {
                     int gray = (b >> (x*2)) & 0x03;
-                    *p++ = COLORS[gray];
+                    *p++ = gColor[gray];
                 }
             }
         }
@@ -577,6 +574,42 @@ namespace {
 
         return gameIndex;
     }
+
+    // Settings color to 565.
+    uint64_t settingsColorTo565(int color) {
+        switch (color) {
+            case COLOR_WHITE: return LCD_WHITE;
+            case COLOR_GREEN: return LCD_GREEN;
+            case COLOR_AMBER: return LCD_ORANGE;
+        }
+
+        // Magenta to indicate something went wrong.
+        return LCD_MAGENTA;
+    }
+
+    void refreshScreen() {
+        for (int pos = 0; pos < Trs80ScreenSize; pos++) {
+            writeScreenChar(pos, readMemoryByte(Trs80ScreenBegin + pos));
+        }
+    }
+
+    void setColor(int settingsColor) {
+        uint16_t c565 = settingsColorTo565(settingsColor);
+        uint8_t r = RGB565TORED(c565);
+        uint8_t g = RGB565TOGREEN(c565);
+        uint8_t b = RGB565TOBLUE(c565);
+        // TODO try gamma 2.2:
+        uint16_t half = RGB888TO565(r / 2, g / 2, b / 2);
+
+        gColor[0] = LCD_BLACK;
+        gColor[1] = half;
+        gColor[2] = half;
+        gColor[3] = c565;
+    }
+
+    void setSound(int sound) {
+        gSound = sound;
+    }
 }
 
 #if ENABLE_LCD
@@ -676,6 +709,15 @@ void trs80Idle() {
     pollWebapp();
 }
 
+void updateColorFromSettings(int settingsColor) {
+    setColor(settingsColor);
+    refreshScreen();
+}
+
+void updateSoundFromSettings(int settingsSound) {
+    setSound(settingsSound);
+}
+
 int main() {
     stdio_init_all();
 
@@ -683,6 +725,8 @@ int main() {
     printf("Micro Model III\n");
     printf("---------------\n");
 
+    initSettings();
+    setColor(getSettingsColor());
     configureGpio();
     prepareFontBitmaps();
     configureLcd();
